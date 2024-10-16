@@ -5,7 +5,6 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
-import classNames from 'classnames'
 import { RiArrowDownSLine } from '@remixicon/react'
 import type { ModelAndParameter } from '../configuration/debug/types'
 import SuggestedAction from './suggested-action'
@@ -25,6 +24,7 @@ import { LeftIndent02 } from '@/app/components/base/icons/src/vender/line/editor
 import { FileText } from '@/app/components/base/icons/src/vender/line/files'
 import WorkflowToolConfigureButton from '@/app/components/tools/workflow-tool/configure-button'
 import type { InputVar } from '@/app/components/workflow/types'
+import { appDefaultIconBackground } from '@/config'
 
 export type AppPublisherProps = {
   disabled?: boolean
@@ -120,13 +120,11 @@ const AppPublisher = ({
       <PortalToFollowElemTrigger onClick={handleTrigger}>
         <Button
           variant='primary'
-          className={`
-            pl-3 pr-2 py-0 h-8 text-[13px] font-medium
-            ${disabled && 'cursor-not-allowed opacity-50'}
-          `}
+          className='pl-3 pr-2'
+          disabled={disabled}
         >
           {t('workflow.common.publish')}
-          <RiArrowDownSLine className='ml-0.5' />
+          <RiArrowDownSLine className='w-4 h-4 ml-0.5' />
         </Button>
       </PortalToFollowElemTrigger>
       <PortalToFollowElemContent className='z-[11]'>
@@ -143,9 +141,10 @@ const AppPublisher = ({
                   </div>
                   <Button
                     className={`
-                      ml-2 px-2 py-0 h-6 shadow-xs rounded-md text-xs font-medium text-primary-600 border-[0.5px] bg-white border-gray-200
+                      ml-2 px-2 text-primary-600
                       ${published && 'text-primary-300 border-gray-100'}
                     `}
+                    size='small'
                     onClick={handleRestore}
                     disabled={published}
                   >
@@ -169,10 +168,7 @@ const AppPublisher = ({
               : (
                 <Button
                   variant='primary'
-                  className={classNames(
-                    'mt-3 px-3 py-0 w-full h-8 border-[0.5px] border-primary-700 rounded-lg text-[13px] font-medium',
-                    (publishDisabled || published) && 'border-transparent',
-                  )}
+                  className='w-full mt-3'
                   onClick={() => handlePublish()}
                   disabled={publishDisabled || published}
                 >
@@ -217,8 +213,8 @@ const AppPublisher = ({
                 detailNeedUpdate={!!toolPublished && published}
                 workflowAppId={appDetail?.id}
                 icon={{
-                  content: appDetail?.icon,
-                  background: appDetail?.icon_background,
+                  content: (appDetail.icon_type === 'image' ? '🤖' : appDetail?.icon) || '🤖',
+                  background: (appDetail.icon_type === 'image' ? appDefaultIconBackground : appDetail?.icon_background) || appDefaultIconBackground,
                 }}
                 name={appDetail?.name}
                 description={appDetail?.description}
@@ -231,6 +227,7 @@ const AppPublisher = ({
         </div>
       </PortalToFollowElemContent>
       <EmbeddedModal
+        siteInfo={appDetail?.site}
         isShow={embeddingModalOpen}
         onClose={() => setEmbeddingModalOpen(false)}
         appBaseUrl={appBaseURL}

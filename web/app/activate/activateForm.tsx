@@ -4,10 +4,10 @@ import { useContext } from 'use-context-selector'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
-import cn from 'classnames'
 import Link from 'next/link'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import style from './style.module.css'
+import cn from '@/utils/classnames'
 import Button from '@/app/components/base/button'
 
 import { SimpleSelect } from '@/app/components/base/select'
@@ -109,7 +109,7 @@ const ActivateForm = () => {
             <h2 className="text-[32px] font-bold text-gray-900">{t('login.invalid')}</h2>
           </div>
           <div className="w-full mx-auto mt-6">
-            <Button variant='primary' className='w-full !fone-medium !text-sm'>
+            <Button variant='primary' className='w-full !text-sm'>
               <a href="https://dify.ai">{t('login.explore')}</a>
             </Button>
           </div>
@@ -143,6 +143,7 @@ const ActivateForm = () => {
                     onChange={e => setName(e.target.value)}
                     placeholder={t('login.namePlaceholder') || ''}
                     className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm pr-10'}
+                    tabIndex={1}
                   />
                 </div>
               </div>
@@ -159,6 +160,7 @@ const ActivateForm = () => {
                     onChange={e => setPassword(e.target.value)}
                     placeholder={t('login.passwordPlaceholder') || ''}
                     className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm pr-10'}
+                    tabIndex={2}
                   />
                 </div>
                 <div className='mt-1 text-xs text-gray-500'>{t('login.error.passwordInvalid')}</div>
@@ -196,7 +198,7 @@ const ActivateForm = () => {
               <div>
                 <Button
                   variant='primary'
-                  className='w-full !fone-medium !text-sm'
+                  className='w-full !text-sm'
                   onClick={handleActivate}
                 >
                   {`${t('login.join')} ${checkRes.workspace_name}`}
@@ -226,7 +228,7 @@ const ActivateForm = () => {
             </h2>
           </div>
           <div className="w-full mx-auto mt-6">
-            <Button variant='primary' className='w-full !fone-medium !text-sm'>
+            <Button variant='primary' className='w-full !text-sm'>
               <a href="/signin">{t('login.activated')}</a>
             </Button>
           </div>

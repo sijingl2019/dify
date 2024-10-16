@@ -2,13 +2,19 @@ from enum import Enum
 
 
 class VectorType(str, Enum):
-    CHROMA = 'chroma'
-    MILVUS = 'milvus'
-    PGVECTOR = 'pgvector'
-    PGVECTO_RS = 'pgvecto-rs'
-    QDRANT = 'qdrant'
-    RELYT = 'relyt'
-    TIDB_VECTOR = 'tidb_vector'
-    WEAVIATE = 'weaviate'
-    OPENSEARCH = 'opensearch'
-    TENCENT = 'tencent'
+    ANALYTICDB = "analyticdb"
+    CHROMA = "chroma"
+    MILVUS = "milvus"
+    MYSCALE = "myscale"
+    PGVECTOR = "pgvector"
+    PGVECTO_RS = "pgvecto-rs"
+    QDRANT = "qdrant"
+    RELYT = "relyt"
+    TIDB_VECTOR = "tidb_vector"
+    WEAVIATE = "weaviate"
+    OPENSEARCH = "opensearch"
+    TENCENT = "tencent"
+    ORACLE = "oracle"
+    ELASTICSEARCH = "elasticsearch"
+    BAIDU = "baidu"
+    VIKINGDB = "vikingdb"

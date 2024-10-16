@@ -2,15 +2,16 @@
 import React, { useEffect, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from 'next/navigation'
-import classNames from 'classnames'
 import useSWR from 'swr'
 import Link from 'next/link'
 import Toast from '../components/base/toast'
 import style from './page.module.css'
+import classNames from '@/utils/classnames'
 import { IS_CE_EDITION, SUPPORT_MAIL_LOGIN, apiPrefix, emailRegex } from '@/config'
 import Button from '@/app/components/base/button'
 import { login, oauth } from '@/service/common'
 import { getPurifyHref } from '@/utils'
+import useRefreshToken from '@/hooks/use-refresh-token'
 
 type IState = {
   formValid: boolean
@@ -61,6 +62,7 @@ function reducer(state: IState, action: IAction) {
 
 const NormalForm = () => {
   const { t } = useTranslation()
+  const { getNewAccessToken } = useRefreshToken()
   const useEmailLogin = IS_CE_EDITION || SUPPORT_MAIL_LOGIN
 
   const router = useRouter()
@@ -95,7 +97,9 @@ const NormalForm = () => {
         },
       })
       if (res.result === 'success') {
-        localStorage.setItem('console_token', res.data)
+        localStorage.setItem('console_token', res.data.access_token)
+        localStorage.setItem('refresh_token', res.data.refresh_token)
+        getNewAccessToken()
         router.replace('/apps')
       }
       else {
@@ -156,9 +160,8 @@ const NormalForm = () => {
               <div className='w-full'>
                 <a href={getPurifyHref(`${apiPrefix}/oauth/login/github`)}>
                   <Button
-                    variant='default'
                     disabled={isLoading}
-                    className='w-full hover:!bg-gray-50 !text-sm !font-medium'
+                    className='w-full hover:!bg-gray-50'
                   >
                     <>
                       <span className={
@@ -175,9 +178,8 @@ const NormalForm = () => {
               <div className='w-full'>
                 <a href={getPurifyHref(`${apiPrefix}/oauth/login/google`)}>
                   <Button
-                    variant='default'
                     disabled={isLoading}
-                    className='w-full hover:!bg-gray-50 !text-sm !font-medium'
+                    className='w-full hover:!bg-gray-50'
                   >
                     <>
                       <span className={
@@ -219,6 +221,7 @@ const NormalForm = () => {
                       autoComplete="email"
                       placeholder={t('login.emailPlaceholder') || ''}
                       className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm'}
+                      tabIndex={1}
                     />
                   </div>
                 </div>
@@ -226,21 +229,9 @@ const NormalForm = () => {
                 <div className='mb-4'>
                   <label htmlFor="password" className="my-2 flex items-center justify-between text-sm font-medium text-gray-900">
                     <span>{t('login.password')}</span>
-                    {/* <Tooltip
-                      selector='forget-password'
-                      htmlContent={
-                        <div>
-                          <div className='font-medium'>{t('login.forget')}</div>
-                          <div className='font-medium text-gray-500'>
-                            <code>
-                              sudo rm -rf /
-                            </code>
-                          </div>
-                        </div>
-                      }
-                    >
-                      <span className='cursor-pointer text-primary-600'>{t('login.forget')}</span>
-                    </Tooltip> */}
+                    <Link href='/forgot-password' className='text-primary-600'>
+                      {t('login.forget')}
+                    </Link>
                   </label>
                   <div className="relative mt-1">
                     <input
@@ -255,6 +246,7 @@ const NormalForm = () => {
                       autoComplete="current-password"
                       placeholder={t('login.passwordPlaceholder') || ''}
                       className={'appearance-none block w-full rounded-lg pl-[14px] px-3 py-2 border border-gray-200 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 placeholder-gray-400 caret-primary-600 sm:text-sm pr-10'}
+                      tabIndex={2}
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                       <button
@@ -274,7 +266,7 @@ const NormalForm = () => {
                     variant='primary'
                     onClick={handleEmailPasswordLogin}
                     disabled={isLoading}
-                    className="w-full !fone-medium !text-sm"
+                    className="w-full"
                   >{t('login.signBtn')}</Button>
                 </div>
               </form>

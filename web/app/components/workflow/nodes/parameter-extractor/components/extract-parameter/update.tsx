@@ -3,9 +3,9 @@ import type { FC } from 'react'
 import React, { useCallback, useState } from 'react'
 import { useBoolean } from 'ahooks'
 import { useTranslation } from 'react-i18next'
-import cn from 'classnames'
 import type { Param } from '../../types'
 import { ParamType } from '../../types'
+import cn from '@/utils/classnames'
 import AddButton from '@/app/components/base/button/add-button'
 import Modal from '@/app/components/base/modal'
 import Button from '@/app/components/base/button'
@@ -99,7 +99,7 @@ const AddExtractParameter: FC<Props> = ({
     if (!param.name)
       errMessage = t(`${errorI18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.addExtractParameterContent.name`) })
     if (!errMessage && param.type === ParamType.select && (!param.options || param.options.length === 0))
-      errMessage = t(`${errorI18nPrefix}.fieldRequired`, { field: t('appDebug.variableConig.options') })
+      errMessage = t(`${errorI18nPrefix}.fieldRequired`, { field: t('appDebug.variableConfig.options') })
     if (!errMessage && !param.description)
       errMessage = t(`${errorI18nPrefix}.fieldRequired`, { field: t(`${i18nPrefix}.addExtractParameterContent.description`) })
 
@@ -160,7 +160,7 @@ const AddExtractParameter: FC<Props> = ({
                 />
               </Field>
               {param.type === ParamType.select && (
-                <Field title={t('appDebug.variableConig.options')}>
+                <Field title={t('appDebug.variableConfig.options')}>
                   <ConfigSelect options={param.options || []} onChange={handleParamChange('options')} />
                 </Field>
               )}
@@ -180,8 +180,8 @@ const AddExtractParameter: FC<Props> = ({
               </Field>
             </div>
             <div className='mt-4 flex justify-end space-x-2'>
-              <Button className='flex !h-8 !w-[95px] text-[13px] font-medium text-gray-700' onClick={hideModal} >{t('common.operation.cancel')}</Button>
-              <Button className='flex !h-8 !w-[95px] text-[13px] font-medium' variant='primary' onClick={handleSave} >{isAdd ? t('common.operation.add') : t('common.operation.save')}</Button>
+              <Button className='!w-[95px]' onClick={hideModal} >{t('common.operation.cancel')}</Button>
+              <Button className='!w-[95px]' variant='primary' onClick={handleSave} >{isAdd ? t('common.operation.add') : t('common.operation.save')}</Button>
             </div>
           </div>
         </Modal>

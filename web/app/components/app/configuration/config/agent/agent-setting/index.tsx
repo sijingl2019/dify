@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { RiCloseLine } from '@remixicon/react'
 import ItemPanel from './item-panel'
 import Button from '@/app/components/base/button'
-import { CuteRobote } from '@/app/components/base/icons/src/vender/solid/communication'
+import { CuteRobot } from '@/app/components/base/icons/src/vender/solid/communication'
 import { Unblur } from '@/app/components/base/icons/src/vender/solid/education'
 import Slider from '@/app/components/base/slider'
 import type { AgentConfig } from '@/models/debug'
@@ -65,7 +65,7 @@ const AgentSetting: FC<Props> = ({
           <ItemPanel
             className='mb-4'
             icon={
-              <CuteRobote className='w-4 h-4 text-indigo-600' />
+              <CuteRobot className='w-4 h-4 text-indigo-600' />
             }
             name={t('appDebug.agent.agentMode')}
             description={t('appDebug.agent.agentModeDes')}
@@ -137,13 +137,12 @@ const AgentSetting: FC<Props> = ({
         >
           <Button
             onClick={onCancel}
-            className='mr-2 text-sm font-medium'
+            className='mr-2'
           >
             {t('common.operation.cancel')}
           </Button>
           <Button
             variant='primary'
-            className='text-sm font-medium'
             onClick={handleSave}
           >
             {t('common.operation.save')}
