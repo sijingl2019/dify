@@ -1,104 +1,97 @@
-from flask_restful import Resource, fields, marshal_with
+from typing import Any, cast
 
-from configs import dify_config
-from controllers.service_api import api
+from flask_restx import Resource
+
+from controllers.common.fields import Parameters
+from controllers.service_api import service_api_ns
 from controllers.service_api.app.error import AppUnavailableError
 from controllers.service_api.wraps import validate_app_token
+from core.app.app_config.common.parameters_mapping import get_parameters_from_feature_dict
 from models.model import App, AppMode
 from services.app_service import AppService
 
 
+@service_api_ns.route("/parameters")
 class AppParameterApi(Resource):
     """Resource for app variables."""
 
-    variable_fields = {
-        "key": fields.String,
-        "name": fields.String,
-        "description": fields.String,
-        "type": fields.String,
-        "default": fields.String,
-        "max_length": fields.Integer,
-        "options": fields.List(fields.String),
-    }
-
-    system_parameters_fields = {"image_file_size_limit": fields.String}
-
-    parameters_fields = {
-        "opening_statement": fields.String,
-        "suggested_questions": fields.Raw,
-        "suggested_questions_after_answer": fields.Raw,
-        "speech_to_text": fields.Raw,
-        "text_to_speech": fields.Raw,
-        "retriever_resource": fields.Raw,
-        "annotation_reply": fields.Raw,
-        "more_like_this": fields.Raw,
-        "user_input_form": fields.Raw,
-        "sensitive_word_avoidance": fields.Raw,
-        "file_upload": fields.Raw,
-        "system_parameters": fields.Nested(system_parameters_fields),
-    }
-
+    @service_api_ns.doc("get_app_parameters")
+    @service_api_ns.doc(description="Retrieve application input parameters and configuration")
+    @service_api_ns.doc(
+        responses={
+            200: "Parameters retrieved successfully",
+            401: "Unauthorized - invalid API token",
+            404: "Application not found",
+        }
+    )
     @validate_app_token
-    @marshal_with(parameters_fields)
     def get(self, app_model: App):
-        """Retrieve app parameters."""
-        if app_model.mode in {AppMode.ADVANCED_CHAT.value, AppMode.WORKFLOW.value}:
+        """Retrieve app parameters.
+
+        Returns the input form parameters and configuration for the application.
+        """
+        if app_model.mode in {AppMode.ADVANCED_CHAT, AppMode.WORKFLOW}:
             workflow = app_model.workflow
             if workflow is None:
                 raise AppUnavailableError()
 
-            features_dict = workflow.features_dict
+            features_dict: dict[str, Any] = workflow.features_dict
             user_input_form = workflow.user_input_form(to_old_structure=True)
         else:
             app_model_config = app_model.app_model_config
-            features_dict = app_model_config.to_dict()
+            if app_model_config is None:
+                raise AppUnavailableError()
+
+            features_dict = cast(dict[str, Any], app_model_config.to_dict())
 
             user_input_form = features_dict.get("user_input_form", [])
 
-        return {
-            "opening_statement": features_dict.get("opening_statement"),
-            "suggested_questions": features_dict.get("suggested_questions", []),
-            "suggested_questions_after_answer": features_dict.get(
-                "suggested_questions_after_answer", {"enabled": False}
-            ),
-            "speech_to_text": features_dict.get("speech_to_text", {"enabled": False}),
-            "text_to_speech": features_dict.get("text_to_speech", {"enabled": False}),
-            "retriever_resource": features_dict.get("retriever_resource", {"enabled": False}),
-            "annotation_reply": features_dict.get("annotation_reply", {"enabled": False}),
-            "more_like_this": features_dict.get("more_like_this", {"enabled": False}),
-            "user_input_form": user_input_form,
-            "sensitive_word_avoidance": features_dict.get(
-                "sensitive_word_avoidance", {"enabled": False, "type": "", "configs": []}
-            ),
-            "file_upload": features_dict.get(
-                "file_upload",
-                {
-                    "image": {
-                        "enabled": False,
-                        "number_limits": 3,
-                        "detail": "high",
-                        "transfer_methods": ["remote_url", "local_file"],
-                    }
-                },
-            ),
-            "system_parameters": {"image_file_size_limit": dify_config.UPLOAD_IMAGE_FILE_SIZE_LIMIT},
-        }
+        parameters = get_parameters_from_feature_dict(features_dict=features_dict, user_input_form=user_input_form)
+        return Parameters.model_validate(parameters).model_dump(mode="json")
 
 
+@service_api_ns.route("/meta")
 class AppMetaApi(Resource):
+    @service_api_ns.doc("get_app_meta")
+    @service_api_ns.doc(description="Get application metadata")
+    @service_api_ns.doc(
+        responses={
+            200: "Metadata retrieved successfully",
+            401: "Unauthorized - invalid API token",
+            404: "Application not found",
+        }
+    )
     @validate_app_token
     def get(self, app_model: App):
-        """Get app meta"""
+        """Get app metadata.
+
+        Returns metadata about the application including configuration and settings.
+        """
         return AppService().get_app_meta(app_model)
 
 
+@service_api_ns.route("/info")
 class AppInfoApi(Resource):
+    @service_api_ns.doc("get_app_info")
+    @service_api_ns.doc(description="Get basic application information")
+    @service_api_ns.doc(
+        responses={
+            200: "Application info retrieved successfully",
+            401: "Unauthorized - invalid API token",
+            404: "Application not found",
+        }
+    )
     @validate_app_token
     def get(self, app_model: App):
-        """Get app information"""
-        return {"name": app_model.name, "description": app_model.description}
+        """Get app information.
 
-
-api.add_resource(AppParameterApi, "/parameters")
-api.add_resource(AppMetaApi, "/meta")
-api.add_resource(AppInfoApi, "/info")
+        Returns basic information about the application including name, description, tags, and mode.
+        """
+        tags = [tag.name for tag in app_model.tags]
+        return {
+            "name": app_model.name,
+            "description": app_model.description,
+            "tags": tags,
+            "mode": app_model.mode,
+            "author_name": app_model.author_name,
+        }

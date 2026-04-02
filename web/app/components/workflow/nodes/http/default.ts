@@ -1,9 +1,17 @@
-import { BlockEnum } from '../../types'
 import type { NodeDefault } from '../../types'
-import { AuthorizationType, BodyType, type HttpNodeType, Method } from './types'
-import { ALL_CHAT_AVAILABLE_BLOCKS, ALL_COMPLETION_AVAILABLE_BLOCKS } from '@/app/components/workflow/constants'
+import type { BodyPayload, HttpNodeType } from './types'
+import { BlockClassificationEnum } from '@/app/components/workflow/block-selector/types'
+import { BlockEnum } from '@/app/components/workflow/types'
+import { genNodeMetaData } from '@/app/components/workflow/utils'
+import { AuthorizationType, BodyType, Method } from './types'
 
+const metaData = genNodeMetaData({
+  classification: BlockClassificationEnum.Utilities,
+  sort: 1,
+  type: BlockEnum.HttpRequest,
+})
 const nodeDefault: NodeDefault<HttpNodeType> = {
+  metaData,
   defaultValue: {
     variables: [],
     method: Method.get,
@@ -16,29 +24,31 @@ const nodeDefault: NodeDefault<HttpNodeType> = {
     params: '',
     body: {
       type: BodyType.none,
-      data: '',
+      data: [],
     },
+    ssl_verify: true,
     timeout: {
       max_connect_timeout: 0,
       max_read_timeout: 0,
       max_write_timeout: 0,
     },
-  },
-  getAvailablePrevNodes(isChatMode: boolean) {
-    const nodes = isChatMode
-      ? ALL_CHAT_AVAILABLE_BLOCKS
-      : ALL_COMPLETION_AVAILABLE_BLOCKS.filter(type => type !== BlockEnum.End)
-    return nodes
-  },
-  getAvailableNextNodes(isChatMode: boolean) {
-    const nodes = isChatMode ? ALL_CHAT_AVAILABLE_BLOCKS : ALL_COMPLETION_AVAILABLE_BLOCKS
-    return nodes
+    retry_config: {
+      retry_enabled: true,
+      max_retries: 3,
+      retry_interval: 100,
+    },
   },
   checkValid(payload: HttpNodeType, t: any) {
     let errorMessages = ''
 
     if (!errorMessages && !payload.url)
-      errorMessages = t('workflow.errorMsg.fieldRequired', { field: t('workflow.nodes.http.api') })
+      errorMessages = t('errorMsg.fieldRequired', { ns: 'workflow', field: t('nodes.http.api', { ns: 'workflow' }) })
+
+    if (!errorMessages
+      && payload.body.type === BodyType.binary
+      && ((!(payload.body.data as BodyPayload)[0]?.file) || (payload.body.data as BodyPayload)[0]?.file?.length === 0)) {
+      errorMessages = t('errorMsg.fieldRequired', { ns: 'workflow', field: t('nodes.http.binaryFileVariable', { ns: 'workflow' }) })
+    }
 
     return {
       isValid: !errorMessages,

@@ -1,25 +1,32 @@
 'use client'
 import type { FC } from 'react'
-import React, { useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import produce from 'immer'
+import type { InputVar } from '../../../../types'
+import type { FileEntity } from '@/app/components/base/file-uploader/types'
 import {
   RiDeleteBinLine,
 } from '@remixicon/react'
-import type { InputVar } from '../../../../types'
-import { BlockEnum, InputVarType } from '../../../../types'
-import CodeEditor from '../editor/code-editor'
-import { CodeLanguage } from '../../../code/types'
-import TextEditor from '../editor/text-editor'
-import Select from '@/app/components/base/select'
-import TextGenerationImageUploader from '@/app/components/base/image-uploader/text-generation-image-uploader'
-import { Resolution } from '@/types/app'
-import { useFeatures } from '@/app/components/base/features/hooks'
-import { VarBlockIcon } from '@/app/components/workflow/block-icon'
+import { produce } from 'immer'
+import * as React from 'react'
+import { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { FileUploaderInAttachmentWrapper } from '@/app/components/base/file-uploader'
 import { Line3 } from '@/app/components/base/icons/src/public/common'
-import { Variable02 } from '@/app/components/base/icons/src/vender/solid/development'
 import { BubbleX } from '@/app/components/base/icons/src/vender/line/others'
-import cn from '@/utils/classnames'
+import { Variable02 } from '@/app/components/base/icons/src/vender/solid/development'
+import TextGenerationImageUploader from '@/app/components/base/image-uploader/text-generation-image-uploader'
+import Input from '@/app/components/base/input'
+import { FILE_EXTS } from '@/app/components/base/prompt-editor/constants'
+import Select from '@/app/components/base/select'
+import Textarea from '@/app/components/base/textarea'
+import { VarBlockIcon } from '@/app/components/workflow/block-icon'
+import { useHooksStore } from '@/app/components/workflow/hooks-store'
+import { Resolution, TransferMethod } from '@/types/app'
+import { cn } from '@/utils/classnames'
+import { BlockEnum, InputVarType, SupportUploadFileTypes } from '../../../../types'
+import { CodeLanguage } from '../../../code/types'
+import CodeEditor from '../editor/code-editor'
+import TextEditor from '../editor/text-editor'
+import BoolInput from './bool-input'
 
 type Props = {
   payload: InputVar
@@ -27,6 +34,7 @@ type Props = {
   onChange: (value: any) => void
   className?: string
   autoFocus?: boolean
+  inStepRun?: boolean
 }
 
 const FormItem: FC<Props> = ({
@@ -35,10 +43,18 @@ const FormItem: FC<Props> = ({
   onChange,
   className,
   autoFocus,
+  inStepRun = false,
 }) => {
   const { t } = useTranslation()
   const { type } = payload
-  const fileSettings = useFeatures(s => s.features.file)
+  const fileSettings = useHooksStore(s => s.configsMap?.fileSettings)
+  const jsonSchemaPlaceholder = React.useMemo(() => {
+    const schema = (payload as any)?.json_schema
+    if (!schema)
+      return ''
+    return typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2)
+  }, [payload])
+
   const handleArrayItemChange = useCallback((index: number) => {
     return (newValue: any) => {
       const newValues = produce(value, (draft: any) => {
@@ -60,22 +76,22 @@ const FormItem: FC<Props> = ({
     if (typeof payload.label === 'object') {
       const { nodeType, nodeName, variable, isChatVar } = payload.label
       return (
-        <div className='h-full flex items-center'>
+        <div className="flex h-full items-center">
           {!isChatVar && (
-            <div className='flex items-center'>
-              <div className='p-[1px]'>
+            <div className="flex items-center">
+              <div className="p-px">
                 <VarBlockIcon type={nodeType || BlockEnum.Start} />
               </div>
-              <div className='mx-0.5 text-xs font-medium text-gray-700 max-w-[150px] truncate' title={nodeName}>
+              <div className="mx-0.5 max-w-[150px] truncate text-xs font-medium text-text-secondary" title={nodeName}>
                 {nodeName}
               </div>
-              <Line3 className='mr-0.5'></Line3>
+              <Line3 className="mr-0.5"></Line3>
             </div>
           )}
-          <div className='flex items-center text-primary-600'>
-            {!isChatVar && <Variable02 className='w-3.5 h-3.5' />}
-            {isChatVar && <BubbleX className='w-3.5 h-3.5 text-util-colors-teal-teal-700' />}
-            <div className={cn('ml-0.5 text-xs font-medium max-w-[150px] truncate', isChatVar && 'text-text-secondary')} title={variable} >
+          <div className="flex items-center text-primary-600">
+            {!isChatVar && <Variable02 className="h-3.5 w-3.5" />}
+            {isChatVar && <BubbleX className="h-3.5 w-3.5 text-util-colors-teal-teal-700" />}
+            <div className={cn('ml-0.5 max-w-[150px] truncate text-xs font-medium', isChatVar && 'text-text-secondary')} title={variable}>
               {variable}
             </div>
           </div>
@@ -85,26 +101,55 @@ const FormItem: FC<Props> = ({
     return ''
   })()
 
+  const isBooleanType = type === InputVarType.checkbox
   const isArrayLikeType = [InputVarType.contexts, InputVarType.iterator].includes(type)
   const isContext = type === InputVarType.contexts
   const isIterator = type === InputVarType.iterator
+  const isIteratorItemFile = isIterator && payload.isFileItem
+  const singleFileValue = useMemo(() => {
+    if (payload.variable === '#files#')
+      return value || []
+
+    return value ? [value] : []
+  }, [payload.variable, value])
+  const handleSingleFileChange = useCallback((files: FileEntity[]) => {
+    if (payload.variable === '#files#')
+      onChange(files)
+    else if (files.length)
+      onChange(files[0])
+    else
+      onChange(null)
+  }, [onChange, payload.variable])
+
   return (
-    <div className={`${className}`}>
-      {!isArrayLikeType && (
-        <div className='h-6 mb-1 flex items-center gap-1 text-text-secondary system-sm-semibold'>
-          <div className='truncate'>{typeof payload.label === 'object' ? nodeKey : payload.label}</div>
-          {!payload.required && <span className='text-text-tertiary system-xs-regular'>{t('workflow.panel.optional')}</span>}
+    <div className={cn(className)}>
+      {!isArrayLikeType && !isBooleanType && (
+        <div className="mb-1 flex h-6 items-center gap-1 text-text-secondary system-sm-semibold">
+          <div className="truncate">
+            {typeof payload.label === 'object' ? nodeKey : payload.label}
+          </div>
+          {payload.hide === true
+            ? (
+                <span className="text-text-tertiary system-xs-regular">
+                  {t('panel.optional_and_hidden', { ns: 'workflow' })}
+                </span>
+              )
+            : (
+                !payload.required && (
+                  <span className="text-text-tertiary system-xs-regular">
+                    {t('panel.optional', { ns: 'workflow' })}
+                  </span>
+                )
+              )}
         </div>
       )}
-      <div className='grow'>
+      <div className="grow">
         {
           type === InputVarType.textInput && (
-            <input
-              className="w-full px-3 text-sm leading-8 text-gray-900 border-0 rounded-lg grow h-8 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-gray-200"
-              type="text"
+            <Input
               value={value || ''}
               onChange={e => onChange(e.target.value)}
-              placeholder={t('appDebug.variableConfig.inputPlaceholder')!}
+              placeholder={typeof payload.label === 'object' ? payload.label.variable : payload.label}
               autoFocus={autoFocus}
             />
           )
@@ -112,12 +157,11 @@ const FormItem: FC<Props> = ({
 
         {
           type === InputVarType.number && (
-            <input
-              className="w-full px-3 text-sm leading-8 text-gray-900 border-0 rounded-lg grow h-8 bg-gray-50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-gray-200"
+            <Input
               type="number"
               value={value || ''}
               onChange={e => onChange(e.target.value)}
-              placeholder={t('appDebug.variableConfig.inputPlaceholder')!}
+              placeholder={typeof payload.label === 'object' ? payload.label.variable : payload.label}
               autoFocus={autoFocus}
             />
           )
@@ -125,11 +169,10 @@ const FormItem: FC<Props> = ({
 
         {
           type === InputVarType.paragraph && (
-            <textarea
-              className="w-full px-3 py-1 text-sm leading-[18px] text-gray-900 border-0 rounded-lg grow h-[120px] bg-gray-50 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-gray-200"
+            <Textarea
               value={value || ''}
               onChange={e => onChange(e.target.value)}
-              placeholder={t('appDebug.variableConfig.inputPlaceholder')!}
+              placeholder={typeof payload.label === 'object' ? payload.label.variable : payload.label}
               autoFocus={autoFocus}
             />
           )
@@ -139,13 +182,22 @@ const FormItem: FC<Props> = ({
           type === InputVarType.select && (
             <Select
               className="w-full"
-              defaultValue={value || ''}
+              defaultValue={value || payload.default || ''}
               items={payload.options?.map(option => ({ name: option, value: option })) || []}
               onSelect={i => onChange(i.value)}
               allowSearch={false}
             />
           )
         }
+
+        {isBooleanType && (
+          <BoolInput
+            name={payload.label as string}
+            value={!!value}
+            required={payload.required}
+            onChange={onChange}
+          />
+        )}
 
         {
           type === InputVarType.json && (
@@ -157,13 +209,79 @@ const FormItem: FC<Props> = ({
             />
           )
         }
-
+        {type === InputVarType.jsonObject && (
+          <CodeEditor
+            value={value}
+            language={CodeLanguage.json}
+            onChange={onChange}
+            noWrapper
+            className="bg h-[80px] overflow-y-auto radius-lg bg-components-input-bg-normal p-1"
+            placeholder={
+              <div className="whitespace-pre">{jsonSchemaPlaceholder}</div>
+            }
+          />
+        )}
+        {(type === InputVarType.singleFile) && (
+          <FileUploaderInAttachmentWrapper
+            value={singleFileValue}
+            onChange={handleSingleFileChange}
+            fileConfig={{
+              allowed_file_types: inStepRun && (!payload.allowed_file_types || payload.allowed_file_types.length === 0)
+                ? [
+                    SupportUploadFileTypes.image,
+                    SupportUploadFileTypes.document,
+                    SupportUploadFileTypes.audio,
+                    SupportUploadFileTypes.video,
+                  ]
+                : payload.allowed_file_types,
+              allowed_file_extensions: inStepRun && (!payload.allowed_file_extensions || payload.allowed_file_extensions.length === 0)
+                ? [
+                    ...FILE_EXTS[SupportUploadFileTypes.image],
+                    ...FILE_EXTS[SupportUploadFileTypes.document],
+                    ...FILE_EXTS[SupportUploadFileTypes.audio],
+                    ...FILE_EXTS[SupportUploadFileTypes.video],
+                  ]
+                : payload.allowed_file_extensions,
+              allowed_file_upload_methods: inStepRun ? [TransferMethod.local_file, TransferMethod.remote_url] : payload.allowed_file_upload_methods,
+              number_limits: 1,
+              fileUploadConfig: fileSettings?.fileUploadConfig,
+            }}
+          />
+        )}
+        {(type === InputVarType.multiFiles || isIteratorItemFile) && (
+          <FileUploaderInAttachmentWrapper
+            value={value}
+            onChange={files => onChange(files)}
+            fileConfig={{
+              allowed_file_types: (inStepRun || isIteratorItemFile) && (!payload.allowed_file_types || payload.allowed_file_types.length === 0)
+                ? [
+                    SupportUploadFileTypes.image,
+                    SupportUploadFileTypes.document,
+                    SupportUploadFileTypes.audio,
+                    SupportUploadFileTypes.video,
+                  ]
+                : payload.allowed_file_types,
+              allowed_file_extensions: (inStepRun || isIteratorItemFile) && (!payload.allowed_file_extensions || payload.allowed_file_extensions.length === 0)
+                ? [
+                    ...FILE_EXTS[SupportUploadFileTypes.image],
+                    ...FILE_EXTS[SupportUploadFileTypes.document],
+                    ...FILE_EXTS[SupportUploadFileTypes.audio],
+                    ...FILE_EXTS[SupportUploadFileTypes.video],
+                  ]
+                : payload.allowed_file_extensions,
+              allowed_file_upload_methods: (inStepRun || isIteratorItemFile) ? [TransferMethod.local_file, TransferMethod.remote_url] : payload.allowed_file_upload_methods,
+              number_limits: (inStepRun || isIteratorItemFile) ? 5 : payload.max_length,
+              fileUploadConfig: fileSettings?.fileUploadConfig,
+            }}
+          />
+        )}
         {
           type === InputVarType.files && (
             <TextGenerationImageUploader
               settings={{
-                ...fileSettings?.image,
-                detail: Resolution.high,
+                ...fileSettings,
+                detail: fileSettings?.image?.detail || Resolution.high,
+                transfer_methods: fileSettings?.allowed_file_upload_methods || [],
               } as any}
               onFilesChange={files => onChange(files.filter(file => file.progress !== -1).map(fileItem => ({
                 type: 'image',
@@ -177,7 +295,7 @@ const FormItem: FC<Props> = ({
 
         {
           isContext && (
-            <div className='space-y-2'>
+            <div className="space-y-2">
               {(value || []).map((item: any, index: number) => (
                 <CodeEditor
                   key={index}
@@ -185,10 +303,12 @@ const FormItem: FC<Props> = ({
                   title={<span>JSON</span>}
                   headerRight={
                     (value as any).length > 1
-                      ? (<RiDeleteBinLine
-                        onClick={handleArrayItemRemove(index)}
-                        className='mr-1 w-3.5 h-3.5 text-gray-500 cursor-pointer'
-                      />)
+                      ? (
+                          <RiDeleteBinLine
+                            onClick={handleArrayItemRemove(index)}
+                            className="mr-1 h-3.5 w-3.5 cursor-pointer text-text-tertiary"
+                          />
+                        )
                       : undefined
                   }
                   language={CodeLanguage.json}
@@ -200,21 +320,30 @@ const FormItem: FC<Props> = ({
         }
 
         {
-          isIterator && (
-            <div className='space-y-2'>
+          (isIterator && !isIteratorItemFile) && (
+            <div className="space-y-2">
               {(value || []).map((item: any, index: number) => (
                 <TextEditor
                   key={index}
                   isInNode
                   value={item}
-                  title={<span>{t('appDebug.variableConfig.content')} {index + 1} </span>}
+                  title={(
+                    <span>
+                      {t('variableConfig.content', { ns: 'appDebug' })}
+                      {' '}
+                      {index + 1}
+                      {' '}
+                    </span>
+                  )}
                   onChange={handleArrayItemChange(index)}
                   headerRight={
                     (value as any).length > 1
-                      ? (<RiDeleteBinLine
-                        onClick={handleArrayItemRemove(index)}
-                        className='mr-1 w-3.5 h-3.5 text-gray-500 cursor-pointer'
-                      />)
+                      ? (
+                          <RiDeleteBinLine
+                            onClick={handleArrayItemRemove(index)}
+                            className="mr-1 h-3.5 w-3.5 cursor-pointer text-text-tertiary"
+                          />
+                        )
                       : undefined
                   }
                 />

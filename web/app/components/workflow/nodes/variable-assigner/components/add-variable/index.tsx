@@ -1,23 +1,23 @@
-import {
-  memo,
-  useCallback,
-  useState,
-} from 'react'
-import { useVariableAssigner } from '../../hooks'
 import type { VariableAssignerNodeType } from '../../types'
-import cn from '@/utils/classnames'
-import {
-  PortalToFollowElem,
-  PortalToFollowElemContent,
-  PortalToFollowElemTrigger,
-} from '@/app/components/base/portal-to-follow-elem'
-import { Plus02 } from '@/app/components/base/icons/src/vender/line/general'
-import AddVariablePopup from '@/app/components/workflow/nodes/_base/components/add-variable-popup'
 import type {
   NodeOutPutVar,
   ValueSelector,
   Var,
 } from '@/app/components/workflow/types'
+import {
+  memo,
+  useCallback,
+  useState,
+} from 'react'
+import { Plus02 } from '@/app/components/base/icons/src/vender/line/general'
+import {
+  PortalToFollowElem,
+  PortalToFollowElemContent,
+  PortalToFollowElemTrigger,
+} from '@/app/components/base/portal-to-follow-elem'
+import AddVariablePopup from '@/app/components/workflow/nodes/_base/components/add-variable-popup'
+import { cn } from '@/utils/classnames'
+import { useVariableAssigner } from '../../hooks'
 
 export type AddVariableProps = {
   variableAssignerNodeId: string
@@ -46,11 +46,12 @@ const AddVariable = ({
 
   return (
     <div className={cn(
-      open && '!flex',
-      variableAssignerNodeData.selected && '!flex',
-    )}>
+      open && 'flex!',
+      variableAssignerNodeData.selected && 'flex!',
+    )}
+    >
       <PortalToFollowElem
-        placement={'right'}
+        placement="right"
         offset={4}
         open={open}
         onOpenChange={setOpen}
@@ -61,21 +62,21 @@ const AddVariable = ({
           <div
             className={cn(
               'group/addvariable flex items-center justify-center',
-              'w-4 h-4 cursor-pointer',
+              'h-4 w-4 cursor-pointer',
               'hover:rounded-full hover:bg-primary-600',
-              open && '!rounded-full !bg-primary-600',
+              open && 'rounded-full! bg-primary-600!',
             )}
           >
             <Plus02
               className={cn(
-                'w-2.5 h-2.5 text-gray-500',
-                'group-hover/addvariable:text-white',
-                open && '!text-white',
+                'h-2.5 w-2.5 text-text-tertiary',
+                'group-hover/addvariable:text-text-primary',
+                open && 'text-text-primary!',
               )}
             />
           </div>
         </PortalToFollowElemTrigger>
-        <PortalToFollowElemContent className='z-[1000]'>
+        <PortalToFollowElemContent className="z-1000">
           <AddVariablePopup
             onSelect={handleSelectVariable}
             availableVars={availableVars}

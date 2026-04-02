@@ -1,24 +1,29 @@
+import type { StartNodeType } from '../nodes/start/types'
 import {
   memo,
+  useCallback,
   useMemo,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNodes } from 'reactflow'
+import Button from '@/app/components/base/button'
+import { useCheckInputsForms } from '@/app/components/base/chat/chat/check-input-forms-hooks'
+import {
+  getProcessedInputs,
+} from '@/app/components/base/chat/chat/utils'
+import { TransferMethod } from '../../base/text-generation/types'
+import { useWorkflowRun } from '../hooks'
+import { useHooksStore } from '../hooks-store'
 import FormItem from '../nodes/_base/components/before-run-form/form-item'
+import {
+  useStore,
+  useWorkflowStore,
+} from '../store'
 import {
   BlockEnum,
   InputVarType,
   WorkflowRunningStatus,
 } from '../types'
-import {
-  useStore,
-  useWorkflowStore,
-} from '../store'
-import { useWorkflowRun } from '../hooks'
-import type { StartNodeType } from '../nodes/start/types'
-import { TransferMethod } from '../../base/text-generation/types'
-import Button from '@/app/components/base/button'
-import { useFeatures } from '@/app/components/base/features/hooks'
 
 type Props = {
   onRun: () => void
@@ -27,9 +32,9 @@ type Props = {
 const InputsPanel = ({ onRun }: Props) => {
   const { t } = useTranslation()
   const workflowStore = useWorkflowStore()
-  const fileSettings = useFeatures(s => s.features.file)
-  const nodes = useNodes<StartNodeType>()
   const inputs = useStore(s => s.inputs)
+  const fileSettings = useHooksStore(s => s.configsMap?.fileSettings)
+  const nodes = useNodes<StartNodeType>()
   const files = useStore(s => s.files)
   const workflowRunningData = useStore(s => s.workflowRunningData)
   const {
@@ -37,6 +42,20 @@ const InputsPanel = ({ onRun }: Props) => {
   } = useWorkflowRun()
   const startNode = nodes.find(node => node.data.type === BlockEnum.Start)
   const startVariables = startNode?.data.variables
+  const { checkInputsForm } = useCheckInputsForms()
+
+  const initialInputs = useMemo(() => {
+    const result = { ...inputs }
+    if (startVariables) {
+      startVariables.forEach((variable) => {
+        if (variable.default)
+          result[variable.variable] = variable.default
+        if (inputs[variable.variable] !== undefined)
+          result[variable.variable] = inputs[variable.variable]
+      })
+    }
+    return result
+  }, [inputs, startVariables])
 
   const variables = useMemo(() => {
     const data = startVariables || []
@@ -56,59 +75,62 @@ const InputsPanel = ({ onRun }: Props) => {
   }, [fileSettings?.image?.enabled, startVariables])
 
   const handleValueChange = (variable: string, v: any) => {
+    const {
+      inputs,
+      setInputs,
+    } = workflowStore.getState()
     if (variable === '__image') {
       workflowStore.setState({
         files: v,
       })
     }
     else {
-      workflowStore.getState().setInputs({
+      setInputs({
         ...inputs,
         [variable]: v,
       })
     }
   }
 
-  const doRun = () => {
+  const doRun = useCallback(() => {
+    if (!checkInputsForm(initialInputs, variables as any))
+      return
     onRun()
-    handleRun({ inputs, files })
-  }
+    handleRun({ inputs: getProcessedInputs(initialInputs, variables as any), files })
+  }, [files, handleRun, initialInputs, onRun, variables, checkInputsForm])
 
-  const canRun = (() => {
-    if (files?.some(item => (item.transfer_method as any) === TransferMethod.local_file && !item.upload_file_id))
-      return false
-
-    return true
-  })()
+  const canRun = useMemo(() => {
+    return !(files?.some(item => (item.transfer_method as any) === TransferMethod.local_file && !item.upload_file_id))
+  }, [files])
 
   return (
     <>
-      <div className='px-4 pb-2'>
+      <div className="px-4 pb-2 pt-3">
         {
           variables.map((variable, index) => (
             <div
               key={variable.variable}
-              className='mb-2 last-of-type:mb-0'
+              className="mb-2 last-of-type:mb-0"
             >
               <FormItem
                 autoFocus={index === 0}
-                className='!block'
+                className="block!"
                 payload={variable}
-                value={inputs[variable.variable]}
+                value={initialInputs[variable.variable]}
                 onChange={v => handleValueChange(variable.variable, v)}
               />
             </div>
           ))
         }
       </div>
-      <div className='flex items-center justify-between px-4 py-2'>
+      <div className="flex items-center justify-between px-4 py-2">
         <Button
-          variant='primary'
+          variant="primary"
           disabled={!canRun || workflowRunningData?.result?.status === WorkflowRunningStatus.Running}
-          className='w-full'
+          className="w-full"
           onClick={doRun}
         >
-          {t('workflow.singleRun.startRun')}
+          {t('singleRun.startRun', { ns: 'workflow' })}
         </Button>
       </div>
     </>

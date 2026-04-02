@@ -1,13 +1,15 @@
 'use client'
 import type { FC } from 'react'
-import React from 'react'
+import { RiDownloadLine } from '@remixicon/react'
+import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   useCSVDownloader,
 } from 'react-papaparse'
-import { useTranslation } from 'react-i18next'
-import cn from '@/utils/classnames'
-import { Download02 as DownloadIcon } from '@/app/components/base/icons/src/vender/solid/general'
+import ActionButton from '@/app/components/base/action-button'
 import Button from '@/app/components/base/button'
+import { cn } from '@/utils/classnames'
+
 export type IResDownloadProps = {
   isMobile: boolean
   values: Record<string, string>[]
@@ -24,17 +26,24 @@ const ResDownload: FC<IResDownloadProps> = ({
     <CSVDownloader
       className="block cursor-pointer"
       type={Type.Link}
-      filename={'result'}
+      filename="result"
       bom={true}
       config={{
         // delimiter: ';',
       }}
       data={values}
     >
-      <Button className={cn('space-x-2 bg-white', isMobile ? '!p-0 !w-8 justify-center' : '')}>
-        <DownloadIcon className='w-4 h-4 text-[#155EEF]' />
-        {!isMobile && <span className='text-[#155EEF]'>{t('common.operation.download')}</span>}
-      </Button>
+      {isMobile && (
+        <ActionButton>
+          <RiDownloadLine className="h-4 w-4" />
+        </ActionButton>
+      )}
+      {!isMobile && (
+        <Button className={cn('space-x-1')}>
+          <RiDownloadLine className="h-4 w-4" />
+          <span>{t('operation.download', { ns: 'common' })}</span>
+        </Button>
+      )}
     </CSVDownloader>
   )
 }

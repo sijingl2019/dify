@@ -1,22 +1,23 @@
-import { useCallback, useEffect } from 'react'
-import produce from 'immer'
-import { useBoolean } from 'ahooks'
-import useVarList from '../_base/hooks/use-var-list'
-import { VarType } from '../../types'
 import type { Var } from '../../types'
-import { useStore } from '../../store'
 import type { Authorization, Body, HttpNodeType, Method, Timeout } from './types'
-import useKeyValueList from './hooks/use-key-value-list'
-import useNodeCrud from '@/app/components/workflow/nodes/_base/hooks/use-node-crud'
-import useOneStepRun from '@/app/components/workflow/nodes/_base/hooks/use-one-step-run'
+import { useBoolean } from 'ahooks'
+import { produce } from 'immer'
+import { useCallback, useEffect, useState } from 'react'
 import {
   useNodesReadOnly,
 } from '@/app/components/workflow/hooks'
+import useNodeCrud from '@/app/components/workflow/nodes/_base/hooks/use-node-crud'
+import { useStore } from '../../store'
+import { VarType } from '../../types'
+import useVarList from '../_base/hooks/use-var-list'
+import useKeyValueList from './hooks/use-key-value-list'
+import { BodyType } from './types'
+import { transformToBodyPayload } from './utils'
 
 const useConfig = (id: string, payload: HttpNodeType) => {
   const { nodesReadOnly: readOnly } = useNodesReadOnly()
 
-  const defaultConfig = useStore(s => s.nodesDefaultConfigs)[payload.type]
+  const defaultConfig = useStore(s => s.nodesDefaultConfigs?.[payload.type])
 
   const { inputs, setInputs } = useNodeCrud<HttpNodeType>(id, payload)
 
@@ -25,15 +26,32 @@ const useConfig = (id: string, payload: HttpNodeType) => {
     setInputs,
   })
 
+  const [isDataReady, setIsDataReady] = useState(false)
+
   useEffect(() => {
     const isReady = defaultConfig && Object.keys(defaultConfig).length > 0
     if (isReady) {
-      setInputs({
+      const newInputs = {
         ...defaultConfig,
         ...inputs,
-      })
+      }
+      const bodyData = newInputs.body.data
+      if (typeof bodyData === 'string') {
+        newInputs.body = {
+          ...newInputs.body,
+          data: transformToBodyPayload(bodyData, [BodyType.formData, BodyType.xWwwFormUrlencoded].includes(newInputs.body.type)),
+        }
+      }
+      else if (!bodyData) {
+        newInputs.body = {
+          ...newInputs.body,
+          data: [],
+        }
+      }
+
+      setInputs(newInputs)
+      setIsDataReady(true)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultConfig])
 
   const handleMethodChange = useCallback((method: Method) => {
@@ -106,45 +124,33 @@ const useConfig = (id: string, payload: HttpNodeType) => {
     return [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
   }, [])
 
-  // single run
-  const {
-    isShowSingleRun,
-    hideSingleRun,
-    getInputVars,
-    runningStatus,
-    handleRun,
-    handleStop,
-    runInputData,
-    setRunInputData,
-    runResult,
-  } = useOneStepRun<HttpNodeType>({
-    id,
-    data: inputs,
-    defaultRunInputData: {},
-  })
+  // curl import panel
+  const [isShowCurlPanel, {
+    setTrue: showCurlPanel,
+    setFalse: hideCurlPanel,
+  }] = useBoolean(false)
 
-  const varInputs = getInputVars([
-    inputs.url,
-    inputs.headers,
-    inputs.params,
-    inputs.body.data,
-  ])
+  const handleCurlImport = useCallback((newNode: HttpNodeType) => {
+    const newInputs = produce(inputs, (draft: HttpNodeType) => {
+      draft.method = newNode.method
+      draft.url = newNode.url
+      draft.headers = newNode.headers
+      draft.params = newNode.params
+      draft.body = newNode.body
+    })
+    setInputs(newInputs)
+  }, [inputs, setInputs])
 
-  const inputVarValues = (() => {
-    const vars: Record<string, any> = {}
-    Object.keys(runInputData)
-      .forEach((key) => {
-        vars[key] = runInputData[key]
-      })
-    return vars
-  })()
-
-  const setInputVarValues = useCallback((newPayload: Record<string, any>) => {
-    setRunInputData(newPayload)
-  }, [setRunInputData])
+  const handleSSLVerifyChange = useCallback((checked: boolean) => {
+    const newInputs = produce(inputs, (draft: HttpNodeType) => {
+      draft.ssl_verify = checked
+    })
+    setInputs(newInputs)
+  }, [inputs, setInputs])
 
   return {
     readOnly,
+    isDataReady,
     inputs,
     handleVarListChange,
     handleAddVariable,
@@ -165,22 +171,19 @@ const useConfig = (id: string, payload: HttpNodeType) => {
     toggleIsParamKeyValueEdit,
     // body
     setBody,
+    // ssl verify
+    handleSSLVerifyChange,
     // authorization
     isShowAuthorization,
     showAuthorization,
     hideAuthorization,
     setAuthorization,
     setTimeout,
-    // single run
-    isShowSingleRun,
-    hideSingleRun,
-    runningStatus,
-    handleRun,
-    handleStop,
-    varInputs,
-    inputVarValues,
-    setInputVarValues,
-    runResult,
+    // curl import
+    isShowCurlPanel,
+    showCurlPanel,
+    hideCurlPanel,
+    handleCurlImport,
   }
 }
 

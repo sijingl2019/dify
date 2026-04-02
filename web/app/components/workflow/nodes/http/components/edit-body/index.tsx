@@ -1,16 +1,21 @@
 'use client'
 import type { FC } from 'react'
-import React, { useCallback, useEffect } from 'react'
-import produce from 'immer'
-import type { Body } from '../../types'
-import { BodyType } from '../../types'
-import useKeyValueList from '../../hooks/use-key-value-list'
-import KeyValue from '../key-value'
-import useAvailableVarList from '../../../_base/hooks/use-available-var-list'
-import cn from '@/utils/classnames'
+import type { Body, BodyPayload, KeyValue as KeyValueType } from '../../types'
+import type { ValueSelector, Var } from '@/app/components/workflow/types'
+import { uniqueId } from 'es-toolkit/compat'
+import { produce } from 'immer'
+import * as React from 'react'
+import { useCallback, useMemo } from 'react'
 import InputWithVar from '@/app/components/workflow/nodes/_base/components/prompt/editor'
-import type { Var } from '@/app/components/workflow/types'
 import { VarType } from '@/app/components/workflow/types'
+import { cn } from '@/utils/classnames'
+import VarReferencePicker from '../../../_base/components/variable/var-reference-picker'
+import useAvailableVarList from '../../../_base/hooks/use-available-var-list'
+import { BodyPayloadValueType, BodyType } from '../../types'
+import KeyValue from '../key-value'
+import { isSupportedHttpBodyVariable } from './supported-body-vars'
+
+const UNIQUE_ID_PREFIX = 'key-value-'
 
 type Props = {
   readonly: boolean
@@ -23,15 +28,17 @@ const allTypes = [
   BodyType.none,
   BodyType.formData,
   BodyType.xWwwFormUrlencoded,
-  BodyType.rawText,
   BodyType.json,
+  BodyType.rawText,
+  BodyType.binary,
 ]
 const bodyTextMap = {
   [BodyType.none]: 'none',
   [BodyType.formData]: 'form-data',
   [BodyType.xWwwFormUrlencoded]: 'x-www-form-urlencoded',
-  [BodyType.rawText]: 'raw text',
+  [BodyType.rawText]: 'raw',
   [BodyType.json]: 'JSON',
+  [BodyType.binary]: 'binary',
 }
 
 const EditBody: FC<Props> = ({
@@ -40,59 +47,87 @@ const EditBody: FC<Props> = ({
   payload,
   onChange,
 }) => {
-  const { type } = payload
+  const { type, data } = payload
+  const bodyPayload = useMemo(() => {
+    if (typeof data === 'string') { // old data
+      return []
+    }
+    return data
+  }, [data])
+  const stringValue = [BodyType.formData, BodyType.xWwwFormUrlencoded].includes(type) ? '' : (bodyPayload[0]?.value || '')
+
   const { availableVars, availableNodes } = useAvailableVarList(nodeId, {
     onlyLeafNodeVar: false,
     filterVar: (varPayload: Var) => {
-      return [VarType.string, VarType.number, VarType.secret, VarType.arrayNumber, VarType.arrayString].includes(varPayload.type)
+      return isSupportedHttpBodyVariable(varPayload.type)
     },
   })
 
   const handleTypeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newType = e.target.value as BodyType
+    const hasKeyValue = [BodyType.formData, BodyType.xWwwFormUrlencoded].includes(newType)
     onChange({
       type: newType,
-      data: '',
+      data: hasKeyValue
+        ? [
+            {
+              id: uniqueId(UNIQUE_ID_PREFIX),
+              type: BodyPayloadValueType.text,
+              key: '',
+              value: '',
+            },
+          ]
+        : [],
     })
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
-    setBody([])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onChange])
 
-  const isCurrentKeyValue = type === BodyType.formData || type === BodyType.xWwwFormUrlencoded
-
-  const {
-    list: body,
-    setList: setBody,
-    addItem: addBody,
-  } = useKeyValueList(payload.data, (value) => {
-    if (!isCurrentKeyValue)
-      return
-
-    const newBody = produce(payload, (draft: Body) => {
-      draft.data = value
+  const handleAddBody = useCallback(() => {
+    const newPayload = produce(payload, (draft) => {
+      (draft.data as BodyPayload).push({
+        id: uniqueId(UNIQUE_ID_PREFIX),
+        type: BodyPayloadValueType.text,
+        key: '',
+        value: '',
+      })
     })
-    onChange(newBody)
-  }, type === BodyType.json)
+    onChange(newPayload)
+  }, [onChange, payload])
 
-  useEffect(() => {
-    if (!isCurrentKeyValue)
-      return
-
-    const newBody = produce(payload, (draft: Body) => {
-      draft.data = body.map((item) => {
-        if (!item.key && !item.value)
-          return ''
-        return `${item.key}:${item.value}`
-      }).join('\n')
+  const handleBodyPayloadChange = useCallback((newList: KeyValueType[]) => {
+    const newPayload = produce(payload, (draft) => {
+      draft.data = newList as BodyPayload
     })
-    onChange(newBody)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCurrentKeyValue])
+    onChange(newPayload)
+  }, [onChange, payload])
+
+  const filterOnlyFileVariable = (varPayload: Var) => {
+    return [VarType.file, VarType.arrayFile].includes(varPayload.type)
+  }
 
   const handleBodyValueChange = useCallback((value: string) => {
     const newBody = produce(payload, (draft: Body) => {
-      draft.data = value
+      if ((draft.data as BodyPayload).length === 0) {
+        (draft.data as BodyPayload).push({
+          id: uniqueId(UNIQUE_ID_PREFIX),
+          type: BodyPayloadValueType.text,
+          key: '',
+          value: '',
+        })
+      }
+      (draft.data as BodyPayload)[0].value = value
+    })
+    onChange(newBody)
+  }, [onChange, payload])
+
+  const handleFileChange = useCallback((value: ValueSelector | string) => {
+    const newBody = produce(payload, (draft: Body) => {
+      if ((draft.data as BodyPayload).length === 0) {
+        (draft.data as BodyPayload).push({
+          id: uniqueId(UNIQUE_ID_PREFIX),
+          type: BodyPayloadValueType.file,
+        })
+      }
+      (draft.data as BodyPayload)[0].file = value as ValueSelector
     })
     onChange(newBody)
   }, [onChange, payload])
@@ -100,9 +135,9 @@ const EditBody: FC<Props> = ({
   return (
     <div>
       {/* body type */}
-      <div className='flex flex-wrap'>
+      <div className="flex flex-wrap">
         {allTypes.map(t => (
-          <label key={t} htmlFor={`body-type-${t}`} className='mr-4 flex items-center h-7 space-x-2'>
+          <label key={t} htmlFor={`body-type-${t}`} className="mr-4 flex h-7 items-center space-x-2">
             <input
               type="radio"
               id={`body-type-${t}`}
@@ -111,7 +146,7 @@ const EditBody: FC<Props> = ({
               onChange={handleTypeChange}
               disabled={readonly}
             />
-            <div className='leading-[18px] text-[13px] font-normal text-gray-700'>{bodyTextMap[t]}</div>
+            <div className="text-[13px] font-normal leading-[18px] text-text-secondary">{bodyTextMap[t]}</div>
           </label>
         ))}
       </div>
@@ -122,18 +157,19 @@ const EditBody: FC<Props> = ({
           <KeyValue
             readonly={readonly}
             nodeId={nodeId}
-            list={body}
-            onChange={setBody}
-            onAdd={addBody}
+            list={bodyPayload as KeyValueType[]}
+            onChange={handleBodyPayloadChange}
+            onAdd={handleAddBody}
+            isSupportFile={type === BodyType.formData}
           />
         )}
 
         {type === BodyType.rawText && (
           <InputWithVar
-            instanceId={'http-body-raw'}
-            title={<div className='uppercase'>Raw text</div>}
+            instanceId="http-body-raw"
+            title={<div className="uppercase">Raw text</div>}
             onChange={handleBodyValueChange}
-            value={payload.data}
+            value={stringValue}
             justVar
             nodesOutputVars={availableVars}
             availableNodes={availableNodes}
@@ -143,14 +179,24 @@ const EditBody: FC<Props> = ({
 
         {type === BodyType.json && (
           <InputWithVar
-            instanceId={'http-body-json'}
-            title='JSON'
-            value={payload.data}
+            instanceId="http-body-json"
+            title="JSON"
+            value={stringValue}
             onChange={handleBodyValueChange}
             justVar
             nodesOutputVars={availableVars}
             availableNodes={availableNodes}
             readOnly={readonly}
+          />
+        )}
+
+        {type === BodyType.binary && (
+          <VarReferencePicker
+            nodeId={nodeId}
+            readonly={readonly}
+            value={bodyPayload[0]?.file || []}
+            onChange={handleFileChange}
+            filterVar={filterOnlyFileVariable}
           />
         )}
       </div>

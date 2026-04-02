@@ -1,8 +1,10 @@
+@reference "../../../styles/globals.css";
+
 .item {
-  height: 200px;
+  max-height: 200px;
   margin-right: 8px;
   margin-bottom: 8px;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   border-radius: 8px;
   cursor: pointer;

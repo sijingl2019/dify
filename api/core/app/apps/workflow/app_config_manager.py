@@ -35,7 +35,7 @@ class WorkflowAppConfigManager(BaseAppConfigManager):
         return app_config
 
     @classmethod
-    def config_validate(cls, tenant_id: str, config: dict, only_structure_validate: bool = False) -> dict:
+    def config_validate(cls, tenant_id: str, config: dict, only_structure_validate: bool = False):
         """
         Validate for workflow app model config
 
@@ -46,9 +46,7 @@ class WorkflowAppConfigManager(BaseAppConfigManager):
         related_config_keys = []
 
         # file upload validation
-        config, current_related_config_keys = FileUploadConfigManager.validate_and_set_defaults(
-            config=config, is_vision=False
-        )
+        config, current_related_config_keys = FileUploadConfigManager.validate_and_set_defaults(config=config)
         related_config_keys.extend(current_related_config_keys)
 
         # text_to_speech

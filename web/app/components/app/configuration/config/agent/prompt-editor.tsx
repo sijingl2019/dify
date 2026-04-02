@@ -1,21 +1,22 @@
 'use client'
 import type { FC } from 'react'
-import React from 'react'
+import type { ExternalDataTool } from '@/models/common'
 import copy from 'copy-to-clipboard'
-import { useContext } from 'use-context-selector'
+import { noop } from 'es-toolkit/function'
+import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import cn from '@/utils/classnames'
+import { useContext } from 'use-context-selector'
+import s from '@/app/components/app/configuration/config-prompt/style.module.css'
 import {
-  Clipboard,
-  ClipboardCheck,
+  Copy,
+  CopyCheck,
 } from '@/app/components/base/icons/src/vender/line/files'
 import PromptEditor from '@/app/components/base/prompt-editor'
-import type { ExternalDataTool } from '@/models/common'
+import { toast } from '@/app/components/base/ui/toast'
 import ConfigContext from '@/context/debug-configuration'
 import { useModalContext } from '@/context/modal-context'
-import { useToastContext } from '@/app/components/base/toast'
+import { cn } from '@/utils/classnames'
 
-import s from '@/app/components/app/configuration/config-prompt/style.module.css'
 type Props = {
   className?: string
   type: 'first-prompt' | 'next-iteration'
@@ -30,8 +31,6 @@ const Editor: FC<Props> = ({
   onChange,
 }) => {
   const { t } = useTranslation()
-
-  const { notify } = useToastContext()
 
   const [isCopied, setIsCopied] = React.useState(false)
   const {
@@ -50,20 +49,22 @@ const Editor: FC<Props> = ({
   const handleOpenExternalDataToolModal = () => {
     setShowExternalDataToolModal({
       payload: {},
-      onSaveCallback: (newExternalDataTool: ExternalDataTool) => {
+      onSaveCallback: (newExternalDataTool?: ExternalDataTool) => {
+        if (!newExternalDataTool)
+          return
         setExternalDataToolsConfig([...externalDataToolsConfig, newExternalDataTool])
       },
       onValidateBeforeSaveCallback: (newExternalDataTool: ExternalDataTool) => {
         for (let i = 0; i < promptVariables.length; i++) {
           if (promptVariables[i].key === newExternalDataTool.variable) {
-            notify({ type: 'error', message: t('appDebug.varKeyError.keyAlreadyExists', { key: promptVariables[i].key }) })
+            toast.error(t('varKeyError.keyAlreadyExists', { ns: 'appDebug', key: promptVariables[i].key }))
             return false
           }
         }
 
         for (let i = 0; i < externalDataToolsConfig.length; i++) {
           if (externalDataToolsConfig[i].variable === newExternalDataTool.variable) {
-            notify({ type: 'error', message: t('appDebug.varKeyError.keyAlreadyExists', { key: externalDataToolsConfig[i].variable }) })
+            toast.error(t('varKeyError.keyAlreadyExists', { ns: 'appDebug', key: externalDataToolsConfig[i].variable }))
             return false
           }
         }
@@ -74,23 +75,26 @@ const Editor: FC<Props> = ({
   }
   return (
     <div className={cn(className, s.gradientBorder, 'relative')}>
-      <div className='rounded-xl bg-white'>
-        <div className={cn(s.boxHeader, 'flex justify-between items-center h-11 pt-2 pr-3 pb-1 pl-4 rounded-tl-xl rounded-tr-xl bg-white hover:shadow-xs')}>
-          <div className='text-sm font-semibold uppercase text-indigo-800'>{t(`appDebug.agent.${isFirstPrompt ? 'firstPrompt' : 'nextIteration'}`)}</div>
+      <div className="rounded-xl bg-white">
+        <div className={cn(s.boxHeader, 'flex h-11 items-center justify-between rounded-tl-xl rounded-tr-xl bg-white pb-1 pl-4 pr-3 pt-2 hover:shadow-xs')}>
+          <div className="text-sm font-semibold uppercase text-indigo-800">{t(`agent.${isFirstPrompt ? 'firstPrompt' : 'nextIteration'}`, { ns: 'appDebug' })}</div>
           <div className={cn(s.optionWrap, 'items-center space-x-1')}>
             {!isCopied
               ? (
-                <Clipboard className='h-6 w-6 p-1 text-gray-500 cursor-pointer' onClick={() => {
-                  copy(value)
-                  setIsCopied(true)
-                }} />
-              )
+                  <Copy
+                    className="h-6 w-6 cursor-pointer p-1 text-gray-500"
+                    onClick={() => {
+                      copy(value)
+                      setIsCopied(true)
+                    }}
+                  />
+                )
               : (
-                <ClipboardCheck className='h-6 w-6 p-1 text-gray-500' />
-              )}
+                  <CopyCheck className="h-6 w-6 p-1 text-gray-500" />
+                )}
           </div>
         </div>
-        <div className={cn(editorHeight, ' px-4 min-h-[102px] overflow-y-auto text-sm text-gray-700')}>
+        <div className={cn(editorHeight, 'min-h-[102px] overflow-y-auto px-4 text-sm text-gray-700')}>
           <PromptEditor
             className={editorHeight}
             value={value}
@@ -106,7 +110,7 @@ const Editor: FC<Props> = ({
             }}
             variableBlock={{
               show: true,
-              variables: modelConfig.configs.prompt_variables.map(item => ({
+              variables: modelConfig.configs.prompt_variables.filter(item => item.key && item.key.trim() && item.name && item.name.trim()).map(item => ({
                 name: item.name,
                 value: item.key,
               })),
@@ -128,18 +132,18 @@ const Editor: FC<Props> = ({
                 user: '',
                 assistant: '',
               },
-              onEditRole: () => { },
+              onEditRole: noop,
             }}
             queryBlock={{
               show: false,
               selectable: false,
             }}
             onChange={onChange}
-            onBlur={() => { }}
+            onBlur={noop}
           />
         </div>
-        <div className='pl-4 pb-2 flex'>
-          <div className="h-[18px] leading-[18px] px-1 rounded-md bg-gray-100 text-xs text-gray-500">{value.length}</div>
+        <div className="flex pb-2 pl-4">
+          <div className="h-[18px] rounded-md bg-gray-100 px-1 text-xs leading-[18px] text-gray-500">{value.length}</div>
         </div>
       </div>
     </div>

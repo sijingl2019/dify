@@ -13,6 +13,10 @@ class AccountLoginError(BaseServiceError):
     pass
 
 
+class AccountPasswordError(BaseServiceError):
+    pass
+
+
 class AccountNotLinkTenantError(BaseServiceError):
     pass
 
@@ -50,8 +54,4 @@ class MemberNotInTenantError(BaseServiceError):
 
 
 class RoleAlreadyAssignedError(BaseServiceError):
-    pass
-
-
-class RateLimitExceededError(BaseServiceError):
     pass

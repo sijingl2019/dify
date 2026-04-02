@@ -1,16 +1,17 @@
 import json
+import logging
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, model_validator
-from sqlalchemy import Column, Sequence, String, Table, create_engine, insert
+from sqlalchemy import Column, String, Table, create_engine, insert
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSON, TEXT
 from sqlalchemy.orm import Session
 
-from core.rag.datasource.entity.embedding import Embeddings
 from core.rag.datasource.vdb.vector_factory import AbstractVectorFactory
 from core.rag.datasource.vdb.vector_type import VectorType
+from core.rag.embedding.embedding_base import Embeddings
 from models.dataset import Dataset
 
 try:
@@ -22,6 +23,8 @@ from configs import dify_config
 from core.rag.datasource.vdb.vector_base import BaseVector
 from core.rag.models.document import Document
 from extensions.ext_redis import redis_client
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()  # type: Any
 
@@ -35,7 +38,7 @@ class RelytConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def validate_config(cls, values: dict) -> dict:
+    def validate_config(cls, values: dict):
         if not values["host"]:
             raise ValueError("config RELYT_HOST is required")
         if not values["port"]:
@@ -58,23 +61,21 @@ class RelytVector(BaseVector):
             f"postgresql+psycopg2://{config.user}:{config.password}@{config.host}:{config.port}/{config.database}"
         )
         self.client = create_engine(self._url)
-        self._fields = []
+        self._fields: list[str] = []
         self._group_id = group_id
 
     def get_type(self) -> str:
         return VectorType.RELYT
 
     def create(self, texts: list[Document], embeddings: list[list[float]], **kwargs):
-        index_params = {}
-        metadatas = [d.metadata for d in texts]
         self.create_collection(len(embeddings[0]))
         self.embedding_dimension = len(embeddings[0])
         self.add_texts(texts, embeddings)
 
     def create_collection(self, dimension: int):
-        lock_name = "vector_indexing_lock_{}".format(self._collection_name)
+        lock_name = f"vector_indexing_lock_{self._collection_name}"
         with redis_client.lock(lock_name, timeout=20):
-            collection_exist_cache_key = "vector_indexing_{}".format(self._collection_name)
+            collection_exist_cache_key = f"vector_indexing_{self._collection_name}"
             if redis_client.get(collection_exist_cache_key):
                 return
             index_name = f"{self._collection_name}_embedding_index"
@@ -107,10 +108,10 @@ class RelytVector(BaseVector):
             redis_client.set(collection_exist_cache_key, 1, ex=3600)
 
     def add_texts(self, documents: list[Document], embeddings: list[list[float]], **kwargs):
-        from pgvecto_rs.sqlalchemy import VECTOR
+        from pgvecto_rs.sqlalchemy import VECTOR  # type: ignore
 
         ids = [str(uuid.uuid1()) for _ in documents]
-        metadatas = [d.metadata for d in documents]
+        metadatas = [d.metadata for d in documents if d.metadata is not None]
         for metadata in metadatas:
             metadata["group_id"] = self._group_id
         texts = [d.page_content for d in documents]
@@ -153,16 +154,14 @@ class RelytVector(BaseVector):
     def get_ids_by_metadata_field(self, key: str, value: str):
         result = None
         with Session(self.client) as session:
-            select_statement = sql_text(
-                f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>'{key}' = '{value}'; """
-            )
-            result = session.execute(select_statement).fetchall()
+            select_statement = sql_text(f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>:key = :value""")
+            result = session.execute(select_statement, {"key": key, "value": value}).fetchall()
         if result:
             return [item[0] for item in result]
         else:
             return None
 
-    def delete_by_uuids(self, ids: Optional[list[str]] = None):
+    def delete_by_uuids(self, ids: list[str] | None = None):
         """Delete by vector IDs.
 
         Args:
@@ -189,8 +188,8 @@ class RelytVector(BaseVector):
                 delete_condition = chunks_table.c.id.in_(ids)
                 conn.execute(chunks_table.delete().where(delete_condition))
                 return True
-        except Exception as e:
-            print("Delete operation failed:", str(e))
+        except Exception:
+            logger.exception("Delete operation failed for collection %s", self._collection_name)
             return False
 
     def delete_by_metadata_field(self, key: str, value: str):
@@ -198,18 +197,17 @@ class RelytVector(BaseVector):
         if ids:
             self.delete_by_uuids(ids)
 
-    def delete_by_ids(self, ids: list[str]) -> None:
+    def delete_by_ids(self, ids: list[str]):
         with Session(self.client) as session:
-            ids_str = ",".join(f"'{doc_id}'" for doc_id in ids)
             select_statement = sql_text(
-                f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>'doc_id' in ({ids_str}); """
+                f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>'doc_id' = ANY(:doc_ids)"""
             )
-            result = session.execute(select_statement).fetchall()
+            result = session.execute(select_statement, {"doc_ids": ids}).fetchall()
         if result:
             ids = [item[0] for item in result]
             self.delete_by_uuids(ids)
 
-    def delete(self) -> None:
+    def delete(self):
         with Session(self.client) as session:
             session.execute(sql_text(f"""DROP TABLE IF EXISTS "{self._collection_name}";"""))
             session.commit()
@@ -217,21 +215,25 @@ class RelytVector(BaseVector):
     def text_exists(self, id: str) -> bool:
         with Session(self.client) as session:
             select_statement = sql_text(
-                f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>'doc_id' = '{id}' limit 1; """
+                f"""SELECT id FROM "{self._collection_name}" WHERE metadata->>'doc_id' = :doc_id limit 1"""
             )
-            result = session.execute(select_statement).fetchall()
+            result = session.execute(select_statement, {"doc_id": id}).fetchall()
         return len(result) > 0
 
     def search_by_vector(self, query_vector: list[float], **kwargs: Any) -> list[Document]:
+        document_ids_filter = kwargs.get("document_ids_filter")
+        filter = kwargs.get("filter", {})
+        if document_ids_filter:
+            filter["document_id"] = document_ids_filter
         results = self.similarity_search_with_score_by_vector(
-            k=int(kwargs.get("top_k")), embedding=query_vector, filter=kwargs.get("filter")
+            k=int(kwargs.get("top_k", 4)), embedding=query_vector, filter=filter
         )
 
         # Organize results.
         docs = []
         for document, score in results:
             score_threshold = float(kwargs.get("score_threshold") or 0.0)
-            if 1 - score > score_threshold:
+            if 1 - score >= score_threshold:
                 docs.append(document)
         return docs
 
@@ -239,20 +241,16 @@ class RelytVector(BaseVector):
         self,
         embedding: list[float],
         k: int = 4,
-        filter: Optional[dict] = None,
+        filter: dict | None = None,
     ) -> list[tuple[Document, float]]:
         # Add the filter if provided
-        try:
-            from sqlalchemy.engine import Row
-        except ImportError:
-            raise ImportError("Could not import Row from sqlalchemy.engine. Please 'pip install sqlalchemy>=1.4'.")
 
         filter_condition = ""
         if filter is not None:
             conditions = [
-                f"metadata->>{key!r} in ({', '.join(map(repr, value))})"
+                f"metadata->>'{key!r}' in ({', '.join(map(repr, value))})"
                 if len(value) > 1
-                else f"metadata->>{key!r} = {value[0]!r}"
+                else f"metadata->>'{key!r}' = {value[0]!r}"
                 for key, value in filter.items()
             ]
             filter_condition = f"WHERE {' AND '.join(conditions)}"
@@ -275,7 +273,7 @@ class RelytVector(BaseVector):
 
         # Execute the query and fetch the results
         with self.client.connect() as conn:
-            results: Sequence[Row] = conn.execute(sql_text(sql_query), params).fetchall()
+            results = conn.execute(sql_text(sql_query), params).fetchall()
 
         documents_with_scores = [
             (
@@ -307,11 +305,11 @@ class RelytVectorFactory(AbstractVectorFactory):
         return RelytVector(
             collection_name=collection_name,
             config=RelytConfig(
-                host=dify_config.RELYT_HOST,
+                host=dify_config.RELYT_HOST or "localhost",
                 port=dify_config.RELYT_PORT,
-                user=dify_config.RELYT_USER,
-                password=dify_config.RELYT_PASSWORD,
-                database=dify_config.RELYT_DATABASE,
+                user=dify_config.RELYT_USER or "",
+                password=dify_config.RELYT_PASSWORD or "",
+                database=dify_config.RELYT_DATABASE or "default",
             ),
             group_id=dataset.id,
         )

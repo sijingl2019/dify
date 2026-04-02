@@ -1,11 +1,18 @@
+import type { FileEntity } from '@/app/components/base/file-uploader/types'
 import type { TypeWithI18N } from '@/app/components/header/account-setting/model-provider-page/declarations'
+import type { InputVarType } from '@/app/components/workflow/types'
 import type { Annotation, MessageRating } from '@/models/log'
-import type { VisionFile } from '@/types/app'
+import type {
+  FileResponse,
+  HumanInputFilledFormData,
+  HumanInputFormData,
+} from '@/types/workflow'
 
 export type MessageMore = {
   time: string
   tokens: number
   latency: number | string
+  tokens_per_second?: number | string
 }
 
 export type FeedbackType = {
@@ -15,11 +22,11 @@ export type FeedbackType = {
 
 export type FeedbackFunc = (
   messageId: string,
-  feedback: FeedbackType
+  feedback: FeedbackType,
 ) => Promise<any>
 export type SubmitAnnotationFunc = (
   messageId: string,
-  content: string
+  content: string,
 ) => Promise<any>
 
 export type DisplayScene = 'web' | 'console'
@@ -39,10 +46,11 @@ export type ThoughtItem = {
   tool_input: string
   tool_labels?: { [key: string]: TypeWithI18N }
   message_id: string
+  conversation_id: string
   observation: string
   position: number
   files?: string[]
-  message_files?: VisionFile[]
+  message_files?: FileEntity[]
 }
 
 export type CitationItem = {
@@ -59,6 +67,19 @@ export type CitationItem = {
   score: number
   word_count: number
 }
+
+export type ExtraContent
+  = {
+    type: 'human_input'
+    submitted: false
+    form_definition: HumanInputFormData
+    workflow_run_id: string
+  }
+  | {
+    type: 'human_input'
+    submitted: true
+    form_submission_data: HumanInputFilledFormData
+  }
 
 export type IChatItem = {
   id: string
@@ -88,14 +109,22 @@ export type IChatItem = {
   useCurrentUserAvatar?: boolean
   isOpeningStatement?: boolean
   suggestedQuestions?: string[]
-  log?: { role: string; text: string; files?: VisionFile[] }[]
+  log?: { role: string, text: string, files?: FileEntity[] }[]
   agent_thoughts?: ThoughtItem[]
-  message_files?: VisionFile[]
+  message_files?: FileEntity[]
   workflow_run_id?: string
   // for agent log
   conversationId?: string
   input?: any
-  parentMessageId?: string
+  parentMessageId?: string | null
+  siblingCount?: number
+  siblingIndex?: number
+  prevSibling?: string
+  nextSibling?: string
+  // for human input
+  humanInputFormDataList?: HumanInputFormData[]
+  humanInputFilledFormDataList?: HumanInputFilledFormData[]
+  extra_contents?: ExtraContent[]
 }
 
 export type Metadata = {
@@ -112,6 +141,7 @@ export type Metadata = {
 export type MessageEnd = {
   id: string
   metadata: Metadata
+  files?: FileResponse[]
 }
 
 export type MessageReplace = {
@@ -128,4 +158,13 @@ export type AnnotationReply = {
   conversation_id: string
   annotation_id: string
   annotation_author_name: string
+}
+
+export type InputForm = {
+  type: InputVarType
+  label: string
+  variable: any
+  required: boolean
+  hide: boolean
+  [key: string]: any
 }

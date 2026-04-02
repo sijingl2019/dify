@@ -1,4 +1,4 @@
-from typing import Optional
+from sqlalchemy import select
 
 from constants.languages import languages
 from extensions.ext_database import db
@@ -13,7 +13,7 @@ class DatabaseRecommendAppRetrieval(RecommendAppRetrievalBase):
     Retrieval recommended app from database
     """
 
-    def get_recommended_apps_and_categories(self, language: str) -> dict:
+    def get_recommended_apps_and_categories(self, language: str):
         result = self.fetch_recommended_apps_from_db(language)
         return result
 
@@ -25,24 +25,20 @@ class DatabaseRecommendAppRetrieval(RecommendAppRetrievalBase):
         return RecommendAppType.DATABASE
 
     @classmethod
-    def fetch_recommended_apps_from_db(cls, language: str) -> dict:
+    def fetch_recommended_apps_from_db(cls, language: str):
         """
         Fetch recommended apps from db.
         :param language: language
         :return:
         """
-        recommended_apps = (
-            db.session.query(RecommendedApp)
-            .filter(RecommendedApp.is_listed == True, RecommendedApp.language == language)
-            .all()
-        )
+        recommended_apps = db.session.scalars(
+            select(RecommendedApp).where(RecommendedApp.is_listed == True, RecommendedApp.language == language)
+        ).all()
 
         if len(recommended_apps) == 0:
-            recommended_apps = (
-                db.session.query(RecommendedApp)
-                .filter(RecommendedApp.is_listed == True, RecommendedApp.language == languages[0])
-                .all()
-            )
+            recommended_apps = db.session.scalars(
+                select(RecommendedApp).where(RecommendedApp.is_listed == True, RecommendedApp.language == languages[0])
+            ).all()
 
         categories = set()
         recommended_apps_result = []
@@ -57,13 +53,7 @@ class DatabaseRecommendAppRetrieval(RecommendAppRetrievalBase):
 
             recommended_app_result = {
                 "id": recommended_app.id,
-                "app": {
-                    "id": app.id,
-                    "name": app.name,
-                    "mode": app.mode,
-                    "icon": app.icon,
-                    "icon_background": app.icon_background,
-                },
+                "app": recommended_app.app,
                 "app_id": recommended_app.app_id,
                 "description": site.description,
                 "copyright": site.copyright,
@@ -80,24 +70,22 @@ class DatabaseRecommendAppRetrieval(RecommendAppRetrievalBase):
         return {"recommended_apps": recommended_apps_result, "categories": sorted(categories)}
 
     @classmethod
-    def fetch_recommended_app_detail_from_db(cls, app_id: str) -> Optional[dict]:
+    def fetch_recommended_app_detail_from_db(cls, app_id: str) -> dict | None:
         """
         Fetch recommended app detail from db.
         :param app_id: App ID
         :return:
         """
         # is in public recommended list
-        recommended_app = (
-            db.session.query(RecommendedApp)
-            .filter(RecommendedApp.is_listed == True, RecommendedApp.app_id == app_id)
-            .first()
+        recommended_app = db.session.scalar(
+            select(RecommendedApp).where(RecommendedApp.is_listed == True, RecommendedApp.app_id == app_id).limit(1)
         )
 
         if not recommended_app:
             return None
 
         # get app detail
-        app_model = db.session.query(App).filter(App.id == app_id).first()
+        app_model = db.session.get(App, app_id)
         if not app_model or not app_model.is_public:
             return None
 

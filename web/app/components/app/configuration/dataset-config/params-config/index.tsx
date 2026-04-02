@@ -1,23 +1,23 @@
 'use client'
+import type { DataSet } from '@/models/datasets'
+import type { DatasetConfigs } from '@/models/debug'
+import { RiEqualizer2Line } from '@remixicon/react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContext } from 'use-context-selector'
-import { RiEqualizer2Line } from '@remixicon/react'
-import ConfigContent from './config-content'
-import cn from '@/utils/classnames'
-import ConfigContext from '@/context/debug-configuration'
-import Modal from '@/app/components/base/modal'
 import Button from '@/app/components/base/button'
-import { RETRIEVE_TYPE } from '@/types/app'
-import Toast from '@/app/components/base/toast'
-import { useModelListAndDefaultModelAndCurrentProviderAndModel } from '@/app/components/header/account-setting/model-provider-page/hooks'
+import Modal from '@/app/components/base/modal'
+import { toast } from '@/app/components/base/ui/toast'
 import { ModelTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
-import type { DataSet } from '@/models/datasets'
-import type { DatasetConfigs } from '@/models/debug'
+import { useCurrentProviderAndModel, useModelListAndDefaultModelAndCurrentProviderAndModel } from '@/app/components/header/account-setting/model-provider-page/hooks'
 import {
   getMultipleRetrievalConfig,
-  getSelectedDatasetsMode,
 } from '@/app/components/workflow/nodes/knowledge-retrieval/utils'
+import ConfigContext from '@/context/debug-configuration'
+import { RerankingModeEnum } from '@/models/datasets'
+import { RETRIEVE_TYPE } from '@/types/app'
+import { cn } from '@/utils/classnames'
+import ConfigContent from './config-content'
 
 type ParamsConfigProps = {
   disabled?: boolean
@@ -37,81 +37,43 @@ const ParamsConfig = ({
   const [tempDataSetConfigs, setTempDataSetConfigs] = useState(datasetConfigs)
 
   useEffect(() => {
-    const {
-      allEconomic,
-      allHighQuality,
-      allHighQualityFullTextSearch,
-      allHighQualityVectorSearch,
-      allExternal,
-      mixtureHighQualityAndEconomic,
-      inconsistentEmbeddingModel,
-      mixtureInternalAndExternal,
-    } = getSelectedDatasetsMode(selectedDatasets)
-    const { datasets, retrieval_model, score_threshold_enabled, ...restConfigs } = datasetConfigs
-    let rerankEnable = restConfigs.reranking_enable
-
-    if ((allEconomic && !restConfigs.reranking_model?.reranking_provider_name && rerankEnable === undefined) || allExternal)
-      rerankEnable = false
-
-    if (allEconomic || allHighQuality || allHighQualityFullTextSearch || allHighQualityVectorSearch || (allExternal && selectedDatasets.length === 1))
-      setRerankSettingModalOpen(false)
-
-    if (mixtureHighQualityAndEconomic || inconsistentEmbeddingModel || mixtureInternalAndExternal || (allExternal && selectedDatasets.length > 1))
-      setRerankSettingModalOpen(true)
-
-    setTempDataSetConfigs({
-      ...getMultipleRetrievalConfig({
-        top_k: restConfigs.top_k,
-        score_threshold: restConfigs.score_threshold,
-        reranking_model: restConfigs.reranking_model && {
-          provider: restConfigs.reranking_model.reranking_provider_name,
-          model: restConfigs.reranking_model.reranking_model_name,
-        },
-        reranking_mode: restConfigs.reranking_mode,
-        weights: restConfigs.weights,
-        reranking_enable: rerankEnable,
-      }, selectedDatasets),
-      reranking_model: restConfigs.reranking_model && {
-        reranking_provider_name: restConfigs.reranking_model.reranking_provider_name,
-        reranking_model_name: restConfigs.reranking_model.reranking_model_name,
-      },
-      retrieval_model,
-      score_threshold_enabled,
-      datasets,
-    })
-  }, [selectedDatasets, datasetConfigs])
+    setTempDataSetConfigs(datasetConfigs)
+  }, [datasetConfigs])
 
   const {
-    defaultModel: rerankDefaultModel,
-    currentModel: isRerankDefaultModelValid,
+    modelList: rerankModelList,
+    currentModel: rerankDefaultModel,
+    currentProvider: rerankDefaultProvider,
   } = useModelListAndDefaultModelAndCurrentProviderAndModel(ModelTypeEnum.rerank)
+
+  const {
+    currentModel: isCurrentRerankModelValid,
+  } = useCurrentProviderAndModel(
+    rerankModelList,
+    {
+      provider: tempDataSetConfigs.reranking_model?.reranking_provider_name ?? '',
+      model: tempDataSetConfigs.reranking_model?.reranking_model_name ?? '',
+    },
+  )
 
   const isValid = () => {
     let errMsg = ''
     if (tempDataSetConfigs.retrieval_model === RETRIEVE_TYPE.multiWay) {
-      if (!tempDataSetConfigs.reranking_model?.reranking_model_name && (!rerankDefaultModel && isRerankDefaultModelValid))
-        errMsg = t('appDebug.datasetConfig.rerankModelRequired')
+      if (tempDataSetConfigs.reranking_enable
+        && tempDataSetConfigs.reranking_mode === RerankingModeEnum.RerankingModel
+        && !isCurrentRerankModelValid) {
+        errMsg = t('datasetConfig.rerankModelRequired', { ns: 'appDebug' })
+      }
     }
     if (errMsg) {
-      Toast.notify({
-        type: 'error',
-        message: errMsg,
-      })
+      toast.error(errMsg)
     }
     return !errMsg
   }
   const handleSave = () => {
     if (!isValid())
       return
-
-    const config = { ...tempDataSetConfigs }
-    if (config.retrieval_model === RETRIEVE_TYPE.multiWay && !config.reranking_model) {
-      config.reranking_model = {
-        reranking_provider_name: rerankDefaultModel?.provider?.provider,
-        reranking_model_name: rerankDefaultModel?.model,
-      } as any
-    }
-    setDatasetConfigs(config)
+    setDatasetConfigs(tempDataSetConfigs)
     setRerankSettingModalOpen(false)
   }
 
@@ -128,13 +90,16 @@ const ParamsConfig = ({
       reranking_mode: restConfigs.reranking_mode,
       weights: restConfigs.weights,
       reranking_enable: restConfigs.reranking_enable,
-    }, selectedDatasets)
+    }, selectedDatasets, selectedDatasets, {
+      provider: rerankDefaultProvider?.provider,
+      model: rerankDefaultModel?.model,
+    })
 
     setTempDataSetConfigs({
       ...retrievalConfig,
-      reranking_model: restConfigs.reranking_model && {
-        reranking_provider_name: restConfigs.reranking_model.reranking_provider_name,
-        reranking_model_name: restConfigs.reranking_model.reranking_model_name,
+      reranking_model: {
+        reranking_provider_name: retrievalConfig.reranking_model?.provider || '',
+        reranking_model_name: retrievalConfig.reranking_model?.model || '',
       },
       retrieval_model,
       score_threshold_enabled,
@@ -145,16 +110,16 @@ const ParamsConfig = ({
   return (
     <div>
       <Button
-        variant='ghost'
-        size='small'
+        variant="ghost"
+        size="small"
         className={cn('h-7', rerankSettingModalOpen && 'bg-components-button-ghost-bg-hover')}
         onClick={() => {
           setRerankSettingModalOpen(true)
         }}
         disabled={disabled}
       >
-        <RiEqualizer2Line className='mr-1 w-3.5 h-3.5' />
-        {t('dataset.retrievalSettings')}
+        <RiEqualizer2Line className="mr-1 h-3.5 w-3.5" />
+        {t('retrievalSettings', { ns: 'dataset' })}
       </Button>
       {
         rerankSettingModalOpen && (
@@ -163,7 +128,7 @@ const ParamsConfig = ({
             onClose={() => {
               setRerankSettingModalOpen(false)
             }}
-            className='sm:min-w-[528px]'
+            className="sm:min-w-[528px]"
           >
             <ConfigContent
               datasetConfigs={tempDataSetConfigs}
@@ -171,11 +136,17 @@ const ParamsConfig = ({
               selectedDatasets={selectedDatasets}
             />
 
-            <div className='mt-6 flex justify-end'>
-              <Button className='mr-2 flex-shrink-0' onClick={() => {
-                setRerankSettingModalOpen(false)
-              }}>{t('common.operation.cancel')}</Button>
-              <Button variant='primary' className='flex-shrink-0' onClick={handleSave} >{t('common.operation.save')}</Button>
+            <div className="mt-6 flex justify-end">
+              <Button
+                className="mr-2 shrink-0"
+                onClick={() => {
+                  setTempDataSetConfigs(datasetConfigs)
+                  setRerankSettingModalOpen(false)
+                }}
+              >
+                {t('operation.cancel', { ns: 'common' })}
+              </Button>
+              <Button variant="primary" className="shrink-0" onClick={handleSave}>{t('operation.save', { ns: 'common' })}</Button>
             </div>
           </Modal>
         )

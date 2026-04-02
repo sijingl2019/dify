@@ -1,8 +1,17 @@
-import type { AgentStrategy, ModelModeType, RETRIEVE_TYPE, ToolItem, TtsAutoPlay } from '@/types/app'
+import type { FileUpload } from '@/app/components/base/features/types'
+import type {
+  MetadataFilteringConditions,
+  MetadataFilteringModeEnum,
+} from '@/app/components/workflow/nodes/knowledge-retrieval/types'
+import type { ModelConfig as NodeModelConfig } from '@/app/components/workflow/types'
+import type { ExternalDataTool } from '@/models/common'
 import type {
   RerankingModeEnum,
+  WeightedScoreEnum,
 } from '@/models/datasets'
-export type Inputs = Record<string, string | number | object>
+import type { AgentStrategy, ModelModeType, RETRIEVE_TYPE, ToolItem, TtsAutoPlay } from '@/types/app'
+
+export type Inputs = Record<string, string | number | object | boolean>
 
 export enum PromptMode {
   simple = 'simple',
@@ -52,6 +61,8 @@ export type PromptVariable = {
   config?: Record<string, any>
   icon?: string
   icon_background?: string
+  hide?: boolean // used in frontend to hide variable
+  json_schema?: string | Record<string, any>
 }
 
 export type CompletionParams = {
@@ -123,14 +134,28 @@ export type ModelConfig = {
   provider: string // LLM Provider: for example "OPENAI"
   model_id: string
   mode: ModelModeType
+  prompt_type?: PromptMode
   configs: PromptConfig
+  chat_prompt_config?: ChatPromptConfig | null
+  completion_prompt_config?: CompletionPromptConfig | null
   opening_statement: string | null
   more_like_this: MoreLikeThisConfig | null
+  suggested_questions: string[] | null
   suggested_questions_after_answer: SuggestedQuestionsAfterAnswerConfig | null
   speech_to_text: SpeechToTextConfig | null
   text_to_speech: TextToSpeechConfig | null
+  file_upload: FileUpload | null
   retriever_resource: RetrieverResourceConfig | null
   sensitive_word_avoidance: ModerationConfig | null
+  annotation_reply: AnnotationReplyConfig | null
+  external_data_tools?: ExternalDataTool[] | null
+  system_parameters: {
+    audio_file_size_limit: number
+    file_size_limit: number
+    image_file_size_limit: number
+    video_file_size_limit: number
+    workflow_file_upload_limit: number
+  }
   dataSets: any[]
   agentConfig: AgentConfig
 }
@@ -156,6 +181,7 @@ export type DatasetConfigs = {
   }
   reranking_mode?: RerankingModeEnum
   weights?: {
+    weight_type: WeightedScoreEnum
     vector_setting: {
       vector_weight: number
       embedding_provider_name: string
@@ -166,6 +192,9 @@ export type DatasetConfigs = {
     }
   }
   reranking_enable?: boolean
+  metadata_filtering_mode?: MetadataFilteringModeEnum
+  metadata_filtering_conditions?: MetadataFilteringConditions
+  metadata_model_config?: NodeModelConfig
 }
 
 export type DebugRequestBody = {

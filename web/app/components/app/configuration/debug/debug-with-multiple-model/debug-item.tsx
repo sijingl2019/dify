@@ -1,16 +1,17 @@
 import type { CSSProperties, FC } from 'react'
-import { useTranslation } from 'react-i18next'
-import { memo } from 'react'
 import type { ModelAndParameter } from '../types'
-import ModelParameterTrigger from './model-parameter-trigger'
-import ChatItem from './chat-item'
-import TextGenerationItem from './text-generation-item'
-import { useDebugWithMultipleModelContext } from './context'
-import { useDebugConfigurationContext } from '@/context/debug-configuration'
-import Dropdown from '@/app/components/base/dropdown'
 import type { Item } from '@/app/components/base/dropdown'
-import { useProviderContext } from '@/context/provider-context'
+import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
+import Dropdown from '@/app/components/base/dropdown'
 import { ModelStatusEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
+import { useDebugConfigurationContext } from '@/context/debug-configuration'
+import { useProviderContext } from '@/context/provider-context'
+import { AppModeEnum } from '@/types/app'
+import ChatItem from './chat-item'
+import { useDebugWithMultipleModelContext } from './context'
+import ModelParameterTrigger from './model-parameter-trigger'
+import TextGenerationItem from './text-generation-item'
 
 type DebugItemProps = {
   modelAndParameter: ModelAndParameter
@@ -64,12 +65,13 @@ const DebugItem: FC<DebugItemProps> = ({
 
   return (
     <div
-      className={`flex flex-col min-w-[320px] rounded-xl bg-white border-[0.5px] border-black/5 ${className}`}
+      className={`flex min-w-[320px] flex-col rounded-xl bg-background-section-burn ${className}`}
       style={style}
     >
-      <div className='shrink-0 flex items-center justify-between h-10 px-3 border-b-[0.5px] border-b-black/5'>
-        <div className='flex items-center justify-center w-6 h-5 font-medium italic text-gray-500'>
-          #{index + 1}
+      <div className="flex h-10 shrink-0 items-center justify-between border-b-[0.5px] border-divider-regular px-3">
+        <div className="flex h-5 w-6 items-center justify-center font-medium italic text-text-tertiary">
+          #
+          {index + 1}
         </div>
         <ModelParameterTrigger
           modelAndParameter={modelAndParameter}
@@ -80,45 +82,45 @@ const DebugItem: FC<DebugItemProps> = ({
             ...(
               multipleModelConfigs.length <= 3
                 ? [
-                  {
-                    value: 'duplicate',
-                    text: t('appDebug.duplicateModel'),
-                  },
-                ]
+                    {
+                      value: 'duplicate',
+                      text: t('duplicateModel', { ns: 'appDebug' }),
+                    },
+                  ]
                 : []
             ),
             ...(
               (modelAndParameter.provider && modelAndParameter.model)
                 ? [
-                  {
-                    value: 'debug-as-single-model',
-                    text: t('appDebug.debugAsSingleModel'),
-                  },
-                ]
+                    {
+                      value: 'debug-as-single-model',
+                      text: t('debugAsSingleModel', { ns: 'appDebug' }),
+                    },
+                  ]
                 : []
             ),
           ]}
           secondItems={
             multipleModelConfigs.length > 2
               ? [
-                {
-                  value: 'remove',
-                  text: t('common.operation.remove') as string,
-                },
-              ]
+                  {
+                    value: 'remove',
+                    text: t('operation.remove', { ns: 'common' }) as string,
+                  },
+                ]
               : undefined
           }
         />
       </div>
       <div style={{ height: 'calc(100% - 40px)' }}>
         {
-          (mode === 'chat' || mode === 'agent-chat') && currentProvider && currentModel && currentModel.status === ModelStatusEnum.active && (
+          (mode === AppModeEnum.CHAT || mode === AppModeEnum.AGENT_CHAT) && currentProvider && currentModel && currentModel.status === ModelStatusEnum.active && (
             <ChatItem modelAndParameter={modelAndParameter} />
           )
         }
         {
-          mode === 'completion' && currentProvider && currentModel && currentModel.status === ModelStatusEnum.active && (
-            <TextGenerationItem modelAndParameter={modelAndParameter}/>
+          mode === AppModeEnum.COMPLETION && currentProvider && currentModel && currentModel.status === ModelStatusEnum.active && (
+            <TextGenerationItem modelAndParameter={modelAndParameter} />
           )
         }
       </div>

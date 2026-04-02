@@ -1,11 +1,11 @@
 import type { LexicalNode, NodeKey, SerializedLexicalNode } from 'lexical'
+import type { Dataset } from './index'
 import { DecoratorNode } from 'lexical'
 import ContextBlockComponent from './component'
-import type { Dataset } from './index'
 
-export type SerializedNode = SerializedLexicalNode & { datasets: Dataset[]; onAddContext: () => void; canNotAddContext: boolean }
+export type SerializedNode = SerializedLexicalNode & { datasets: Dataset[], onAddContext: () => void, canNotAddContext: boolean }
 
-export class ContextBlockNode extends DecoratorNode<JSX.Element> {
+export class ContextBlockNode extends DecoratorNode<React.JSX.Element> {
   __datasets: Dataset[]
   __onAddContext: () => void
   __canNotAddContext: boolean
@@ -40,7 +40,7 @@ export class ContextBlockNode extends DecoratorNode<JSX.Element> {
     return false
   }
 
-  decorate(): JSX.Element {
+  decorate(): React.JSX.Element {
     return (
       <ContextBlockComponent
         nodeKey={this.getKey()}

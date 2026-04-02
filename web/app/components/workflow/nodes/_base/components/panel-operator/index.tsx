@@ -1,17 +1,17 @@
+import type { OffsetOptions } from '@floating-ui/react'
+import type { Node } from '@/app/components/workflow/types'
+import { RiMoreFill } from '@remixicon/react'
 import {
   memo,
   useCallback,
   useState,
 } from 'react'
-import { RiMoreFill } from '@remixicon/react'
-import type { OffsetOptions } from '@floating-ui/react'
-import PanelOperatorPopup from './panel-operator-popup'
 import {
   PortalToFollowElem,
   PortalToFollowElemContent,
   PortalToFollowElemTrigger,
 } from '@/app/components/base/portal-to-follow-elem'
-import type { Node } from '@/app/components/workflow/types'
+import PanelOperatorPopup from './panel-operator-popup'
 
 type PanelOperatorProps = {
   id: string
@@ -31,7 +31,6 @@ const PanelOperator = ({
     crossAxis: 53,
   },
   onOpenChange,
-  inNode,
   showHelpLink = true,
 }: PanelOperatorProps) => {
   const [open, setOpen] = useState(false)
@@ -45,7 +44,7 @@ const PanelOperator = ({
 
   return (
     <PortalToFollowElem
-      placement='bottom-end'
+      placement="bottom-end"
       offset={offset}
       open={open}
       onOpenChange={handleOpenChange}
@@ -53,16 +52,16 @@ const PanelOperator = ({
       <PortalToFollowElemTrigger onClick={() => handleOpenChange(!open)}>
         <div
           className={`
-            flex items-center justify-center w-6 h-6 rounded-md cursor-pointer
-            hover:bg-black/5
-            ${open && 'bg-black/5'}
+            flex h-6 w-6 cursor-pointer items-center justify-center rounded-md
+            hover:bg-state-base-hover
+            ${open && 'bg-state-base-hover'}
             ${triggerClassName}
           `}
         >
-          <RiMoreFill className={`w-4 h-4 ${inNode ? 'text-gray-500' : 'text-gray-700'}`} />
+          <RiMoreFill className="h-4 w-4 text-text-tertiary" />
         </div>
       </PortalToFollowElemTrigger>
-      <PortalToFollowElemContent className='z-[11]'>
+      <PortalToFollowElemContent className="z-11">
         <PanelOperatorPopup
           id={id}
           data={data}

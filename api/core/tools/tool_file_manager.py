@@ -6,13 +6,16 @@ import os
 import time
 from collections.abc import Generator
 from mimetypes import guess_extension, guess_type
-from typing import Optional, Union
+from typing import Union
 from uuid import uuid4
 
-from httpx import get
+import httpx
+from graphon.file import File, FileTransferMethod, get_file_type_by_mime_type
 
 from configs import dify_config
-from extensions.ext_database import db
+from core.db.session_factory import session_factory
+from core.helper import ssrf_proxy
+from core.workflow.file_reference import build_file_reference
 from extensions.ext_storage import storage
 from models.model import MessageFile
 from models.tools import ToolFile
@@ -22,11 +25,27 @@ logger = logging.getLogger(__name__)
 
 class ToolFileManager:
     @staticmethod
+    def _build_graph_file_reference(tool_file: ToolFile) -> File:
+        extension = guess_extension(tool_file.mimetype) or ".bin"
+        return File(
+            type=get_file_type_by_mime_type(tool_file.mimetype),
+            transfer_method=FileTransferMethod.TOOL_FILE,
+            remote_url=tool_file.original_url,
+            reference=build_file_reference(record_id=str(tool_file.id)),
+            filename=tool_file.name,
+            extension=extension,
+            mime_type=tool_file.mimetype,
+            size=tool_file.size,
+            storage_key=tool_file.file_key,
+        )
+
+    @staticmethod
     def sign_file(tool_file_id: str, extension: str) -> str:
         """
-        sign file to get a temporary url
+        sign file to get a temporary url for plugin access
         """
-        base_url = dify_config.FILES_URL
+        # Use internal URL for plugin/tool file access in Docker environments
+        base_url = dify_config.INTERNAL_FILES_URL or dify_config.FILES_URL
         file_preview_url = f"{base_url}/files/tools/{tool_file_id}{extension}"
 
         timestamp = str(int(time.time()))
@@ -55,75 +74,90 @@ class ToolFileManager:
         current_time = int(time.time())
         return current_time - int(timestamp) <= dify_config.FILES_ACCESS_TIMEOUT
 
-    @staticmethod
     def create_file_by_raw(
-        user_id: str, tenant_id: str, conversation_id: Optional[str], file_binary: bytes, mimetype: str
-    ) -> ToolFile:
-        """
-        create file
-        """
-        extension = guess_extension(mimetype) or ".bin"
-        unique_name = uuid4().hex
-        filename = f"tools/{tenant_id}/{unique_name}{extension}"
-        storage.save(filename, file_binary)
-
-        tool_file = ToolFile(
-            user_id=user_id, tenant_id=tenant_id, conversation_id=conversation_id, file_key=filename, mimetype=mimetype
-        )
-
-        db.session.add(tool_file)
-        db.session.commit()
-
-        return tool_file
-
-    @staticmethod
-    def create_file_by_url(
+        self,
+        *,
         user_id: str,
         tenant_id: str,
-        conversation_id: str,
-        file_url: str,
+        conversation_id: str | None,
+        file_binary: bytes,
+        mimetype: str,
+        filename: str | None = None,
     ) -> ToolFile:
-        """
-        create file
-        """
-        # try to download image
-        response = get(file_url)
-        response.raise_for_status()
-        blob = response.content
-        mimetype = guess_type(file_url)[0] or "octet/stream"
         extension = guess_extension(mimetype) or ".bin"
         unique_name = uuid4().hex
-        filename = f"tools/{tenant_id}/{unique_name}{extension}"
-        storage.save(filename, blob)
+        unique_filename = f"{unique_name}{extension}"
+        # default just as before
+        present_filename = unique_filename
+        if filename is not None:
+            has_extension = len(filename.split(".")) > 1
+            # Add extension flexibly
+            present_filename = filename if has_extension else f"{filename}{extension}"
+        filepath = f"tools/{tenant_id}/{unique_filename}"
+        storage.save(filepath, file_binary)
 
-        tool_file = ToolFile(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            file_key=filename,
-            mimetype=mimetype,
-            original_url=file_url,
-        )
+        with session_factory.create_session() as session:
+            tool_file = ToolFile(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                conversation_id=conversation_id,
+                file_key=filepath,
+                mimetype=mimetype,
+                name=present_filename,
+                size=len(file_binary),
+                original_url=None,
+            )
 
-        db.session.add(tool_file)
-        db.session.commit()
+            session.add(tool_file)
+            session.commit()
+            session.refresh(tool_file)
 
         return tool_file
 
-    @staticmethod
-    def create_file_by_key(
-        user_id: str, tenant_id: str, conversation_id: str, file_key: str, mimetype: str
+    def create_file_by_url(
+        self,
+        user_id: str,
+        tenant_id: str,
+        file_url: str,
+        conversation_id: str | None = None,
     ) -> ToolFile:
-        """
-        create file
-        """
-        tool_file = ToolFile(
-            user_id=user_id, tenant_id=tenant_id, conversation_id=conversation_id, file_key=file_key, mimetype=mimetype
+        # try to download image
+        try:
+            response = ssrf_proxy.get(file_url)
+            response.raise_for_status()
+            blob = response.content
+        except httpx.TimeoutException:
+            raise ValueError(f"timeout when downloading file from {file_url}")
+
+        mimetype = (
+            guess_type(file_url)[0]
+            or response.headers.get("Content-Type", "").split(";")[0].strip()
+            or "application/octet-stream"
         )
+        extension = guess_extension(mimetype) or ".bin"
+        unique_name = uuid4().hex
+        filename = f"{unique_name}{extension}"
+        filepath = f"tools/{tenant_id}/{filename}"
+        storage.save(filepath, blob)
+        with session_factory.create_session() as session:
+            tool_file = ToolFile(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                conversation_id=conversation_id,
+                file_key=filepath,
+                mimetype=mimetype,
+                original_url=file_url,
+                name=filename,
+                size=len(blob),
+            )
+
+            session.add(tool_file)
+            session.commit()
+            session.refresh(tool_file)
+
         return tool_file
 
-    @staticmethod
-    def get_file_binary(id: str) -> Union[tuple[bytes, str], None]:
+    def get_file_binary(self, id: str) -> Union[tuple[bytes, str], None]:
         """
         get file binary
 
@@ -131,13 +165,14 @@ class ToolFileManager:
 
         :return: the binary of the file, mime type
         """
-        tool_file: ToolFile = (
-            db.session.query(ToolFile)
-            .filter(
-                ToolFile.id == id,
+        with session_factory.create_session() as session:
+            tool_file: ToolFile | None = (
+                session.query(ToolFile)
+                .where(
+                    ToolFile.id == id,
+                )
+                .first()
             )
-            .first()
-        )
 
         if not tool_file:
             return None
@@ -146,8 +181,7 @@ class ToolFileManager:
 
         return blob, tool_file.mimetype
 
-    @staticmethod
-    def get_file_binary_by_message_file_id(id: str) -> Union[tuple[bytes, str], None]:
+    def get_file_binary_by_message_file_id(self, id: str) -> Union[tuple[bytes, str], None]:
         """
         get file binary
 
@@ -155,30 +189,34 @@ class ToolFileManager:
 
         :return: the binary of the file, mime type
         """
-        message_file: MessageFile = (
-            db.session.query(MessageFile)
-            .filter(
-                MessageFile.id == id,
+        with session_factory.create_session() as session:
+            message_file: MessageFile | None = (
+                session.query(MessageFile)
+                .where(
+                    MessageFile.id == id,
+                )
+                .first()
             )
-            .first()
-        )
 
-        # Check if message_file is not None
-        if message_file is not None:
-            # get tool file id
-            tool_file_id = message_file.url.split("/")[-1]
-            # trim extension
-            tool_file_id = tool_file_id.split(".")[0]
-        else:
-            tool_file_id = None
+            # Check if message_file is not None
+            if message_file is not None:
+                # get tool file id
+                if message_file.url is not None:
+                    tool_file_id = message_file.url.split("/")[-1]
+                    # trim extension
+                    tool_file_id = tool_file_id.split(".")[0]
+                else:
+                    tool_file_id = None
+            else:
+                tool_file_id = None
 
-        tool_file: ToolFile = (
-            db.session.query(ToolFile)
-            .filter(
-                ToolFile.id == tool_file_id,
+            tool_file: ToolFile | None = (
+                session.query(ToolFile)
+                .where(
+                    ToolFile.id == tool_file_id,
+                )
+                .first()
             )
-            .first()
-        )
 
         if not tool_file:
             return None
@@ -187,8 +225,7 @@ class ToolFileManager:
 
         return blob, tool_file.mimetype
 
-    @staticmethod
-    def get_file_generator_by_tool_file_id(tool_file_id: str) -> Union[tuple[Generator, str], None]:
+    def get_file_generator_by_tool_file_id(self, tool_file_id: str) -> tuple[Generator | None, File | None]:
         """
         get file binary
 
@@ -196,23 +233,29 @@ class ToolFileManager:
 
         :return: the binary of the file, mime type
         """
-        tool_file: ToolFile = (
-            db.session.query(ToolFile)
-            .filter(
-                ToolFile.id == tool_file_id,
+        with session_factory.create_session() as session:
+            tool_file: ToolFile | None = (
+                session.query(ToolFile)
+                .where(
+                    ToolFile.id == tool_file_id,
+                )
+                .first()
             )
-            .first()
-        )
 
         if not tool_file:
-            return None
+            return None, None
 
-        generator = storage.load_stream(tool_file.file_key)
+        stream = storage.load_stream(tool_file.file_key)
 
-        return generator, tool_file.mimetype
+        return stream, self._build_graph_file_reference(tool_file)
 
 
 # init tool_file_parser
-from core.file.tool_file_parser import tool_file_manager
+from graphon.file.tool_file_parser import set_tool_file_manager_factory
 
-tool_file_manager["manager"] = ToolFileManager
+
+def _factory() -> ToolFileManager:
+    return ToolFileManager()
+
+
+set_tool_file_manager_factory(_factory)

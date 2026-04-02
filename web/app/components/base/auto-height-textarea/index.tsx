@@ -1,6 +1,6 @@
-import { forwardRef, useEffect, useRef } from 'react'
-import cn from '@/utils/classnames'
+import { useEffect, useRef } from 'react'
 import { sleep } from '@/utils'
+import { cn } from '@/utils/classnames'
 
 type IProps = {
   placeholder?: string
@@ -16,49 +16,66 @@ type IProps = {
   onKeyUp?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
 }
 
-const AutoHeightTextarea = forwardRef(
-  (
-    { value, onChange, placeholder, className, wrapperClassName, minHeight = 36, maxHeight = 96, autoFocus, controlFocus, onKeyDown, onKeyUp }: IProps,
-    outerRef: any,
-  ) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const ref = outerRef || useRef<HTMLTextAreaElement>(null)
+const AutoHeightTextarea = (
+  {
+    ref: outerRef,
+    value,
+    onChange,
+    placeholder,
+    className,
+    wrapperClassName,
+    minHeight = 36,
+    maxHeight = 96,
+    autoFocus,
+    controlFocus,
+    onKeyDown,
+    onKeyUp,
+  }: IProps & {
+    ref?: React.RefObject<HTMLTextAreaElement>
+  },
+) => {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const ref = outerRef || useRef<HTMLTextAreaElement>(null)
 
-    const doFocus = () => {
-      if (ref.current) {
-        ref.current.setSelectionRange(value.length, value.length)
-        ref.current.focus()
-        return true
-      }
-      return false
+  const doFocus = () => {
+    if (ref.current) {
+      ref.current.setSelectionRange(value.length, value.length)
+      ref.current.focus()
+      return true
     }
+    return false
+  }
 
-    const focus = async () => {
-      if (!doFocus()) {
-        let hasFocus = false
-        await sleep(100)
-        hasFocus = doFocus()
-        if (!hasFocus)
-          focus()
-      }
+  const focus = async () => {
+    if (!doFocus()) {
+      let hasFocus = false
+      await sleep(100)
+      hasFocus = doFocus()
+      if (!hasFocus)
+        focus()
     }
+  }
 
-    useEffect(() => {
-      if (autoFocus)
-        focus()
-    }, [])
-    useEffect(() => {
-      if (controlFocus)
-        focus()
-    }, [controlFocus])
+  useEffect(() => {
+    if (autoFocus)
+      focus()
+  }, [])
+  useEffect(() => {
+    if (controlFocus)
+      focus()
+  }, [controlFocus])
 
-    return (
+  return (
+    (
       <div className={`relative ${wrapperClassName}`}>
-        <div className={cn(className, 'invisible whitespace-pre-wrap break-all  overflow-y-auto')} style={{
-          minHeight,
-          maxHeight,
-          paddingRight: (value && value.trim().length > 10000) ? 140 : 130,
-        }}>
+        <div
+          className={cn(className, 'invisible overflow-y-auto whitespace-pre-wrap  break-all')}
+          style={{
+            minHeight,
+            maxHeight,
+            paddingRight: (value && value.trim().length > 10000) ? 140 : 130,
+          }}
+        >
           {!value ? placeholder : value.replace(/\n$/, '\n ')}
         </div>
         <textarea
@@ -76,8 +93,8 @@ const AutoHeightTextarea = forwardRef(
         />
       </div>
     )
-  },
-)
+  )
+}
 
 AutoHeightTextarea.displayName = 'AutoHeightTextarea'
 

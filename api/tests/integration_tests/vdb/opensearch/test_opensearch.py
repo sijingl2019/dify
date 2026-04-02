@@ -23,13 +23,68 @@ def setup_mock_redis():
     ext_redis.redis_client.lock = MagicMock(return_value=mock_redis_lock)
 
 
+class TestOpenSearchConfig:
+    def test_to_opensearch_params(self):
+        config = OpenSearchConfig(
+            host="localhost",
+            port=9200,
+            secure=True,
+            user="admin",
+            password="password",
+        )
+
+        params = config.to_opensearch_params()
+
+        assert params["hosts"] == [{"host": "localhost", "port": 9200}]
+        assert params["use_ssl"] is True
+        assert params["verify_certs"] is True
+        assert params["connection_class"].__name__ == "Urllib3HttpConnection"
+        assert params["http_auth"] == ("admin", "password")
+
+    @patch("boto3.Session", autospec=True)
+    @patch("core.rag.datasource.vdb.opensearch.opensearch_vector.Urllib3AWSV4SignerAuth", autospec=True)
+    def test_to_opensearch_params_with_aws_managed_iam(
+        self, mock_aws_signer_auth: MagicMock, mock_boto_session: MagicMock
+    ):
+        mock_credentials = MagicMock()
+        mock_boto_session.return_value.get_credentials.return_value = mock_credentials
+
+        mock_auth_instance = mock_aws_signer_auth.return_value
+        aws_region = "ap-southeast-2"
+        aws_service = "aoss"
+        host = f"aoss-endpoint.{aws_region}.aoss.amazonaws.com"
+        port = 9201
+
+        config = OpenSearchConfig(
+            host=host,
+            port=port,
+            secure=True,
+            auth_method="aws_managed_iam",
+            aws_region=aws_region,
+            aws_service=aws_service,
+        )
+
+        params = config.to_opensearch_params()
+
+        assert params["hosts"] == [{"host": host, "port": port}]
+        assert params["use_ssl"] is True
+        assert params["verify_certs"] is True
+        assert params["connection_class"].__name__ == "Urllib3HttpConnection"
+        assert params["http_auth"] is mock_auth_instance
+
+        mock_aws_signer_auth.assert_called_once_with(
+            credentials=mock_credentials, region=aws_region, service=aws_service
+        )
+        assert mock_boto_session.return_value.get_credentials.called
+
+
 class TestOpenSearchVector:
     def setup_method(self):
         self.collection_name = "test_collection"
         self.example_doc_id = "example_doc_id"
         self.vector = OpenSearchVector(
             collection_name=self.collection_name,
-            config=OpenSearchConfig(host="localhost", port=9200, user="admin", password="password", secure=False),
+            config=OpenSearchConfig(host="localhost", port=9200, secure=False, user="admin", password="password"),
         )
         self.vector._client = MagicMock()
 
@@ -72,8 +127,8 @@ class TestOpenSearchVector:
                 "hits": [
                     {
                         "_source": {
-                            Field.CONTENT_KEY.value: get_example_text(),
-                            Field.METADATA_KEY.value: {"document_id": self.example_doc_id},
+                            Field.CONTENT_KEY: get_example_text(),
+                            Field.METADATA_KEY: {"document_id": self.example_doc_id},
                         },
                         "_score": 1.0,
                     }
@@ -89,9 +144,9 @@ class TestOpenSearchVector:
         print("Actual document ID:", hits_by_vector[0].metadata["document_id"] if hits_by_vector else "No hits")
 
         assert len(hits_by_vector) > 0, f"Expected at least one hit, got {len(hits_by_vector)}"
-        assert (
-            hits_by_vector[0].metadata["document_id"] == self.example_doc_id
-        ), f"Expected document ID {self.example_doc_id}, got {hits_by_vector[0].metadata['document_id']}"
+        assert hits_by_vector[0].metadata["document_id"] == self.example_doc_id, (
+            f"Expected document ID {self.example_doc_id}, got {hits_by_vector[0].metadata['document_id']}"
+        )
 
     def test_get_ids_by_metadata_field(self):
         mock_response = {"hits": {"total": {"value": 1}, "hits": [{"_id": "mock_id"}]}}
@@ -100,7 +155,7 @@ class TestOpenSearchVector:
         doc = Document(page_content="Test content", metadata={"document_id": self.example_doc_id})
         embedding = [0.1] * 128
 
-        with patch("opensearchpy.helpers.bulk") as mock_bulk:
+        with patch("opensearchpy.helpers.bulk", autospec=True) as mock_bulk:
             mock_bulk.return_value = ([], [])
             self.vector.add_texts([doc], [embedding])
 
@@ -114,7 +169,7 @@ class TestOpenSearchVector:
         doc = Document(page_content="Test content", metadata={"document_id": self.example_doc_id})
         embedding = [0.1] * 128
 
-        with patch("opensearchpy.helpers.bulk") as mock_bulk:
+        with patch("opensearchpy.helpers.bulk", autospec=True) as mock_bulk:
             mock_bulk.return_value = ([], [])
             self.vector.add_texts([doc], [embedding])
 
@@ -124,6 +179,28 @@ class TestOpenSearchVector:
         ids = self.vector.get_ids_by_metadata_field(key="document_id", value=self.example_doc_id)
         assert len(ids) == 1
         assert ids[0] == "mock_id"
+
+    def test_delete_nonexistent_index(self):
+        """Test deleting a non-existent index."""
+        # Create a vector instance with a non-existent collection name
+        self.vector._client.indices.exists.return_value = False
+
+        # Should not raise an exception
+        self.vector.delete()
+
+        # Verify that exists was called but delete was not
+        self.vector._client.indices.exists.assert_called_once_with(index=self.collection_name.lower())
+        self.vector._client.indices.delete.assert_not_called()
+
+    def test_delete_existing_index(self):
+        """Test deleting an existing index."""
+        self.vector._client.indices.exists.return_value = True
+
+        self.vector.delete()
+
+        # Verify both exists and delete were called
+        self.vector._client.indices.exists.assert_called_once_with(index=self.collection_name.lower())
+        self.vector._client.indices.delete.assert_called_once_with(index=self.collection_name.lower())
 
 
 @pytest.mark.usefixtures("setup_mock_redis")

@@ -1,4 +1,4 @@
-import { $isAtNodeEnd } from '@lexical/selection'
+import type { EntityMatch } from '@lexical/text'
 import type {
   ElementNode,
   Klass,
@@ -7,15 +7,15 @@ import type {
   RangeSelection,
   TextNode,
 } from 'lexical'
+import type { MenuTextMatch } from './types'
+import { $isAtNodeEnd } from '@lexical/selection'
 import {
   $createTextNode,
   $getSelection,
   $isRangeSelection,
   $isTextNode,
 } from 'lexical'
-import type { EntityMatch } from '@lexical/text'
 import { CustomTextNode } from './plugins/custom-text/node'
-import type { MenuTextMatch } from './types'
 
 export function getSelectedNode(
   selection: RangeSelection,
@@ -259,7 +259,7 @@ function getFullMatchOffset(
 ): number {
   let triggerOffset = offset
   for (let i = triggerOffset; i <= entryText.length; i++) {
-    if (documentText.substr(-i) === entryText.substr(0, i))
+    if (documentText.slice(-i) === entryText.slice(0, i))
       triggerOffset = i
   }
   return triggerOffset
@@ -296,7 +296,7 @@ export function $splitNodeContainingQuery(match: MenuTextMatch): TextNode | null
 }
 
 export function textToEditorState(text: string) {
-  const paragraph = text.split('\n')
+  const paragraph = text && (typeof text === 'string') ? text.split('\n') : ['']
 
   return JSON.stringify({
     root: {

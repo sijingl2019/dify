@@ -1,119 +1,112 @@
+import type { ChatItem, WorkflowProcess } from '../../types'
+
 import {
-  useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react'
-import {
-  RiArrowRightSLine,
-  RiErrorWarningFill,
-  RiLoader2Line,
-} from '@remixicon/react'
 import { useTranslation } from 'react-i18next'
-import type { ChatItem, WorkflowProcess } from '../../types'
 import TracingPanel from '@/app/components/workflow/run/tracing-panel'
-import cn from '@/utils/classnames'
-import { CheckCircle } from '@/app/components/base/icons/src/vender/solid/general'
 import { WorkflowRunningStatus } from '@/app/components/workflow/types'
-import { useStore as useAppStore } from '@/app/components/app/store'
+import { cn } from '@/utils/classnames'
 
 type WorkflowProcessProps = {
   data: WorkflowProcess
   item?: ChatItem
-  grayBg?: boolean
   expand?: boolean
   hideInfo?: boolean
   hideProcessDetail?: boolean
+  readonly?: boolean
 }
 const WorkflowProcessItem = ({
   data,
-  item,
-  grayBg,
   expand = false,
   hideInfo = false,
   hideProcessDetail = false,
+  readonly = false,
 }: WorkflowProcessProps) => {
   const { t } = useTranslation()
   const [collapse, setCollapse] = useState(!expand)
   const running = data.status === WorkflowRunningStatus.Running
   const succeeded = data.status === WorkflowRunningStatus.Succeeded
   const failed = data.status === WorkflowRunningStatus.Failed || data.status === WorkflowRunningStatus.Stopped
-
-  const background = useMemo(() => {
-    if (running && !collapse)
-      return 'linear-gradient(180deg, #E1E4EA 0%, #EAECF0 100%)'
-
-    if (succeeded && !collapse)
-      return 'linear-gradient(180deg, #ECFDF3 0%, #F6FEF9 100%)'
-
-    if (failed && !collapse)
-      return 'linear-gradient(180deg, #FEE4E2 0%, #FEF3F2 100%)'
-  }, [running, succeeded, failed, collapse])
+  const paused = data.status === WorkflowRunningStatus.Paused
+  const latestNode = data.tracing[data.tracing.length - 1]
 
   useEffect(() => {
     setCollapse(!expand)
   }, [expand])
 
-  const setCurrentLogItem = useAppStore(s => s.setCurrentLogItem)
-  const setShowMessageLogModal = useAppStore(s => s.setShowMessageLogModal)
-  const setCurrentLogModalActiveTab = useAppStore(s => s.setCurrentLogModalActiveTab)
-
-  const showIterationDetail = useCallback(() => {
-    setCurrentLogItem(item)
-    setCurrentLogModalActiveTab('TRACING')
-    setShowMessageLogModal(true)
-  }, [item, setCurrentLogItem, setCurrentLogModalActiveTab, setShowMessageLogModal])
+  if (readonly)
+    return null
 
   return (
     <div
       className={cn(
-        'mb-2 rounded-xl border-[0.5px] border-black/8',
-        collapse ? 'py-[7px]' : hideInfo ? 'pt-2 pb-1' : 'py-2',
-        collapse && (!grayBg ? 'bg-white' : 'bg-gray-50'),
-        hideInfo ? 'mx-[-8px] px-1' : 'w-full px-3',
+        '-mx-1 rounded-xl px-2.5',
+        collapse ? 'border-l-[0.25px] border-components-panel-border py-[7px]' : 'border-[0.5px] border-components-panel-border-subtle px-1 pb-1 pt-[7px]',
+        running && !collapse && 'bg-background-section-burn',
+        succeeded && !collapse && 'bg-state-success-hover',
+        failed && !collapse && 'bg-state-destructive-hover',
+        paused && !collapse && 'bg-state-warning-hover',
+        collapse && !failed && !paused && 'bg-workflow-process-bg',
+        collapse && paused && 'bg-workflow-process-paused-bg',
+        collapse && failed && 'bg-workflow-process-failed-bg',
       )}
-      style={{
-        background,
-      }}
+      data-testid="workflow-process-item"
     >
       <div
-        className={cn(
-          'flex items-center h-[18px] cursor-pointer',
-          hideInfo && 'px-[6px]',
-        )}
+        className={cn('flex cursor-pointer items-center', !collapse && 'px-1.5')}
         onClick={() => setCollapse(!collapse)}
+        data-testid="workflow-process-header"
       >
         {
           running && (
-            <RiLoader2Line className='shrink-0 mr-1 w-3 h-3 text-[#667085] animate-spin' />
+            <div
+              className="i-ri-loader-2-line mr-1 h-3.5 w-3.5 shrink-0 animate-spin text-text-tertiary"
+              data-testid="status-icon-running"
+            />
           )
         }
         {
           succeeded && (
-            <CheckCircle className='shrink-0 mr-1 w-3 h-3 text-[#12B76A]' />
+            <div
+              className="i-custom-vender-solid-general-check-circle mr-1 h-3.5 w-3.5 shrink-0 text-text-success"
+              data-testid="status-icon-success"
+            />
           )
         }
         {
           failed && (
-            <RiErrorWarningFill className='shrink-0 mr-1 w-3 h-3 text-[#F04438]' />
+            <div
+              className="i-ri-error-warning-fill mr-1 h-3.5 w-3.5 shrink-0 text-text-destructive"
+              data-testid="status-icon-failed"
+            />
           )
         }
-        <div className='grow text-xs font-medium text-gray-700'>
-          {t('workflow.common.workflowProcess')}
+        {
+          paused && (
+            <div
+              className="i-ri-pause-circle-fill mr-1 h-3.5 w-3.5 shrink-0 text-text-warning-secondary"
+              data-testid="status-icon-paused"
+            />
+          )
+        }
+        <div
+          className={cn('text-text-secondary system-xs-medium', !collapse && 'grow')}
+          data-testid="workflow-process-title"
+        >
+          {!collapse ? t('common.workflowProcess', { ns: 'workflow' }) : latestNode?.title}
         </div>
-        <RiArrowRightSLine className={`'ml-1 w-3 h-3 text-gray-500' ${collapse ? '' : 'rotate-90'}`} />
+        <div className={cn('i-ri-arrow-right-s-line ml-1 h-4 w-4 text-text-tertiary', !collapse && 'rotate-90')} />
       </div>
       {
         !collapse && (
-          <div className='mt-1.5'>
-            {
-              <TracingPanel
-                list={data.tracing}
-                onShowIterationDetail={showIterationDetail}
-                hideNodeInfo={hideInfo}
-                hideNodeProcessDetail={hideProcessDetail}
-              />
-            }
+          <div className="mt-1.5">
+            <TracingPanel
+              list={data.tracing}
+              hideNodeInfo={hideInfo}
+              hideNodeProcessDetail={hideProcessDetail}
+            />
           </div>
         )
       }

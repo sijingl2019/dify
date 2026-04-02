@@ -1,3 +1,4 @@
+import type { ExternalDataTool } from '@/models/common'
 import type {
   ModelConfig,
   VisionFile,
@@ -21,13 +22,13 @@ export type UserInputFormTextInput = {
 }
 
 export type UserInputFormSelect = {
-  'select': UserInputForm & {
+  select: UserInputForm & {
     options: string[]
   }
 }
 
 export type UserInputFormParagraph = {
-  'paragraph': UserInputForm
+  paragraph: UserInputForm
 }
 
 export type VisionConfig = VisionSettings
@@ -36,6 +37,8 @@ export type EnableType = {
   enabled: boolean
 }
 
-export type TextGenerationConfig = Omit<ModelConfig, 'model'>
+export type TextGenerationConfig = Omit<ModelConfig, 'model'> & {
+  external_data_tools: ExternalDataTool[]
+}
 
 export type OnSend = (message: string, files?: VisionFile[]) => void

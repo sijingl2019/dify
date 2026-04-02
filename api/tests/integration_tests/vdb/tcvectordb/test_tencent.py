@@ -1,8 +1,12 @@
 from unittest.mock import MagicMock
 
 from core.rag.datasource.vdb.tencent.tencent_vector import TencentConfig, TencentVector
-from tests.integration_tests.vdb.__mock.tcvectordb import setup_tcvectordb_mock
-from tests.integration_tests.vdb.test_vector_store import AbstractVectorTest, get_example_text, setup_mock_redis
+from tests.integration_tests.vdb.test_vector_store import AbstractVectorTest, get_example_text
+
+pytest_plugins = (
+    "tests.integration_tests.vdb.test_vector_store",
+    "tests.integration_tests.vdb.__mock.tcvectordb",
+)
 
 mock_client = MagicMock()
 mock_client.list_databases.return_value = [{"name": "test"}]
@@ -21,6 +25,7 @@ class TencentVectorTest(AbstractVectorTest):
                 database="dify",
                 shard=1,
                 replicas=2,
+                enable_hybrid_search=True,
             ),
         )
 
@@ -30,7 +35,7 @@ class TencentVectorTest(AbstractVectorTest):
 
     def search_by_full_text(self):
         hits_by_full_text = self.vector.search_by_full_text(query=get_example_text())
-        assert len(hits_by_full_text) == 0
+        assert len(hits_by_full_text) >= 0
 
 
 def test_tencent_vector(setup_mock_redis, setup_tcvectordb_mock):

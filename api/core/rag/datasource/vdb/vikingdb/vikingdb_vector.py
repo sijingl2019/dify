@@ -2,7 +2,7 @@ import json
 from typing import Any
 
 from pydantic import BaseModel
-from volcengine.viking_db import (
+from volcengine.viking_db import (  # type: ignore
     Data,
     DistanceType,
     Field,
@@ -14,11 +14,12 @@ from volcengine.viking_db import (
 )
 
 from configs import dify_config
-from core.rag.datasource.entity.embedding import Embeddings
 from core.rag.datasource.vdb.field import Field as vdb_Field
+from core.rag.datasource.vdb.field import parse_metadata_json
 from core.rag.datasource.vdb.vector_base import BaseVector
 from core.rag.datasource.vdb.vector_factory import AbstractVectorFactory
 from core.rag.datasource.vdb.vector_type import VectorType
+from core.rag.embedding.embedding_base import Embeddings
 from core.rag.models.document import Document
 from extensions.ext_redis import redis_client
 from models.dataset import Dataset
@@ -32,9 +33,9 @@ class VikingDBConfig(BaseModel):
     scheme: str
     connection_timeout: int
     socket_timeout: int
-    index_type: str = IndexType.HNSW
-    distance: str = DistanceType.L2
-    quant: str = QuantType.Float
+    index_type: str = str(IndexType.HNSW)
+    distance: str = str(DistanceType.L2)
+    quant: str = str(QuantType.Float)
 
 
 class VikingDBVector(BaseVector):
@@ -76,11 +77,11 @@ class VikingDBVector(BaseVector):
 
             if not self._has_collection():
                 fields = [
-                    Field(field_name=vdb_Field.PRIMARY_KEY.value, field_type=FieldType.String, is_primary_key=True),
-                    Field(field_name=vdb_Field.METADATA_KEY.value, field_type=FieldType.String),
-                    Field(field_name=vdb_Field.GROUP_KEY.value, field_type=FieldType.String),
-                    Field(field_name=vdb_Field.CONTENT_KEY.value, field_type=FieldType.Text),
-                    Field(field_name=vdb_Field.VECTOR.value, field_type=FieldType.Vector, dim=dimension),
+                    Field(field_name=vdb_Field.PRIMARY_KEY, field_type=FieldType.String, is_primary_key=True),
+                    Field(field_name=vdb_Field.METADATA_KEY, field_type=FieldType.String),
+                    Field(field_name=vdb_Field.GROUP_KEY, field_type=FieldType.String),
+                    Field(field_name=vdb_Field.CONTENT_KEY, field_type=FieldType.Text),
+                    Field(field_name=vdb_Field.VECTOR, field_type=FieldType.Vector, dim=dimension),
                 ]
 
                 self._client.create_collection(
@@ -100,7 +101,7 @@ class VikingDBVector(BaseVector):
                     collection_name=self._collection_name,
                     index_name=self._index_name,
                     vector_index=vector_index,
-                    partition_by=vdb_Field.GROUP_KEY.value,
+                    partition_by=vdb_Field.GROUP_KEY,
                     description="Index For Dify",
                 )
             redis_client.set(collection_exist_cache_key, 1, ex=3600)
@@ -121,15 +122,16 @@ class VikingDBVector(BaseVector):
         for i, page_content in enumerate(page_contents):
             metadata = {}
             if metadatas is not None:
-                for key, val in metadatas[i].items():
+                for key, val in (metadatas[i] or {}).items():
                     metadata[key] = val
+            # FIXME: fix the type of metadata later
             doc = Data(
                 {
-                    vdb_Field.PRIMARY_KEY.value: metadatas[i]["doc_id"],
-                    vdb_Field.VECTOR.value: embeddings[i] if embeddings else None,
-                    vdb_Field.CONTENT_KEY.value: page_content,
-                    vdb_Field.METADATA_KEY.value: json.dumps(metadata),
-                    vdb_Field.GROUP_KEY.value: self._group_id,
+                    vdb_Field.PRIMARY_KEY: metadatas[i]["doc_id"],  # type: ignore
+                    vdb_Field.VECTOR: embeddings[i] if embeddings else None,
+                    vdb_Field.CONTENT_KEY: page_content,
+                    vdb_Field.METADATA_KEY: json.dumps(metadata),
+                    vdb_Field.GROUP_KEY: self._group_id,
                 }
             )
             docs.append(doc)
@@ -143,14 +145,14 @@ class VikingDBVector(BaseVector):
             return True
         return False
 
-    def delete_by_ids(self, ids: list[str]) -> None:
+    def delete_by_ids(self, ids: list[str]):
         self._client.get_collection(self._collection_name).delete_data(ids)
 
     def get_ids_by_metadata_field(self, key: str, value: str):
         # Note: Metadata field value is an dict, but vikingdb field
         # not support json type
         results = self._client.get_index(self._collection_name, self._index_name).search(
-            filter={"op": "must", "field": vdb_Field.GROUP_KEY.value, "conds": [self._group_id]},
+            filter={"op": "must", "field": vdb_Field.GROUP_KEY, "conds": [self._group_id]},
             # max value is 5000
             limit=5000,
         )
@@ -160,44 +162,46 @@ class VikingDBVector(BaseVector):
 
         ids = []
         for result in results:
-            metadata = result.fields.get(vdb_Field.METADATA_KEY.value)
+            metadata = result.fields.get(vdb_Field.METADATA_KEY)
             if metadata is not None:
-                metadata = json.loads(metadata)
+                metadata = parse_metadata_json(metadata)
                 if metadata.get(key) == value:
                     ids.append(result.id)
         return ids
 
-    def delete_by_metadata_field(self, key: str, value: str) -> None:
+    def delete_by_metadata_field(self, key: str, value: str):
         ids = self.get_ids_by_metadata_field(key, value)
         self.delete_by_ids(ids)
 
     def search_by_vector(self, query_vector: list[float], **kwargs: Any) -> list[Document]:
         results = self._client.get_index(self._collection_name, self._index_name).search_by_vector(
-            query_vector, limit=kwargs.get("top_k", 50)
+            query_vector, limit=kwargs.get("top_k", 4)
         )
         score_threshold = float(kwargs.get("score_threshold") or 0.0)
-        return self._get_search_res(results, score_threshold)
+        docs = self._get_search_res(results, score_threshold)
+        document_ids_filter = kwargs.get("document_ids_filter")
+        if document_ids_filter:
+            docs = [doc for doc in docs if doc.metadata.get("document_id") in document_ids_filter]
+        return docs
 
-    def _get_search_res(self, results, score_threshold):
+    def _get_search_res(self, results, score_threshold) -> list[Document]:
         if len(results) == 0:
             return []
 
         docs = []
         for result in results:
-            metadata = result.fields.get(vdb_Field.METADATA_KEY.value)
-            if metadata is not None:
-                metadata = json.loads(metadata)
-            if result.score > score_threshold:
+            metadata = parse_metadata_json(result.fields.get(vdb_Field.METADATA_KEY))
+            if result.score >= score_threshold:
                 metadata["score"] = result.score
-                doc = Document(page_content=result.fields.get(vdb_Field.CONTENT_KEY.value), metadata=metadata)
+                doc = Document(page_content=result.fields.get(vdb_Field.CONTENT_KEY), metadata=metadata)
                 docs.append(doc)
-        docs = sorted(docs, key=lambda x: x.metadata["score"], reverse=True)
+        docs = sorted(docs, key=lambda x: x.metadata.get("score", 0) if x.metadata else 0, reverse=True)
         return docs
 
     def search_by_full_text(self, query: str, **kwargs: Any) -> list[Document]:
         return []
 
-    def delete(self) -> None:
+    def delete(self):
         if self._has_index():
             self._client.drop_index(self._collection_name, self._index_name)
         if self._has_collection():

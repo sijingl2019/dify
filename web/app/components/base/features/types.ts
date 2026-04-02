@@ -1,8 +1,11 @@
-import type { TransferMethod, TtsAutoPlay } from '@/types/app'
+import type { FileUploadConfigResponse } from '@/models/common'
+import type { Resolution, TransferMethod, TtsAutoPlay } from '@/types/app'
 
 export type EnabledOrDisabled = {
   enabled?: boolean
 }
+
+export type MoreLikeThis = EnabledOrDisabled
 
 export type OpeningStatement = EnabledOrDisabled & {
   opening_statement?: string
@@ -26,14 +29,56 @@ export type SensitiveWordAvoidance = EnabledOrDisabled & {
   config?: any
 }
 
+export enum PreviewMode {
+  NewPage = 'new_page',
+  CurrentPage = 'current_page',
+}
+
 export type FileUpload = {
   image?: EnabledOrDisabled & {
+    detail?: Resolution
     number_limits?: number
     transfer_methods?: TransferMethod[]
+  }
+  document?: EnabledOrDisabled & {
+    number_limits?: number
+    transfer_methods?: TransferMethod[]
+  }
+  audio?: EnabledOrDisabled & {
+    number_limits?: number
+    transfer_methods?: TransferMethod[]
+  }
+  video?: EnabledOrDisabled & {
+    number_limits?: number
+    transfer_methods?: TransferMethod[]
+  }
+  custom?: EnabledOrDisabled & {
+    number_limits?: number
+    transfer_methods?: TransferMethod[]
+  }
+  allowed_file_types?: string[]
+  allowed_file_extensions?: string[]
+  allowed_file_upload_methods?: TransferMethod[]
+  number_limits?: number
+  fileUploadConfig?: FileUploadConfigResponse
+  preview_config?: {
+    mode?: PreviewMode
+    file_type_list?: string[]
+  }
+} & EnabledOrDisabled
+
+export type AnnotationReplyConfig = {
+  enabled: boolean
+  id?: string
+  score_threshold?: number
+  embedding_model?: {
+    embedding_provider_name: string
+    embedding_model_name: string
   }
 }
 
 export enum FeatureEnum {
+  moreLikeThis = 'moreLikeThis',
   opening = 'opening',
   suggested = 'suggested',
   text2speech = 'text2speech',
@@ -41,9 +86,11 @@ export enum FeatureEnum {
   citation = 'citation',
   moderation = 'moderation',
   file = 'file',
+  annotationReply = 'annotationReply',
 }
 
 export type Features = {
+  [FeatureEnum.moreLikeThis]?: MoreLikeThis
   [FeatureEnum.opening]?: OpeningStatement
   [FeatureEnum.suggested]?: SuggestedQuestionsAfterAnswer
   [FeatureEnum.text2speech]?: TextToSpeech
@@ -51,6 +98,7 @@ export type Features = {
   [FeatureEnum.citation]?: RetrieverResource
   [FeatureEnum.moderation]?: SensitiveWordAvoidance
   [FeatureEnum.file]?: FileUpload
+  [FeatureEnum.annotationReply]?: AnnotationReplyConfig
 }
 
-export type OnFeaturesChange = (features: Features) => void
+export type OnFeaturesChange = (features?: Features) => void

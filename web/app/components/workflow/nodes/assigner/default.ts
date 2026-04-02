@@ -1,40 +1,46 @@
-import { BlockEnum } from '../../types'
 import type { NodeDefault } from '../../types'
-import { type AssignerNodeType, WriteMode } from './types'
-import { ALL_CHAT_AVAILABLE_BLOCKS, ALL_COMPLETION_AVAILABLE_BLOCKS } from '@/app/components/workflow/constants'
-const i18nPrefix = 'workflow.errorMsg'
+import type { AssignerNodeType } from './types'
+import { BlockClassificationEnum } from '@/app/components/workflow/block-selector/types'
+import { BlockEnum } from '@/app/components/workflow/types'
+import { genNodeMetaData } from '@/app/components/workflow/utils'
+import { WriteMode } from './types'
 
+const i18nPrefix = 'errorMsg'
+
+const metaData = genNodeMetaData({
+  classification: BlockClassificationEnum.Transform,
+  sort: 5,
+  type: BlockEnum.Assigner,
+  helpLinkUri: 'variable-assigner',
+})
 const nodeDefault: NodeDefault<AssignerNodeType> = {
+  metaData,
   defaultValue: {
-    assigned_variable_selector: [],
-    write_mode: WriteMode.Overwrite,
-    input_variable_selector: [],
-  },
-  getAvailablePrevNodes(isChatMode: boolean) {
-    const nodes = isChatMode
-      ? ALL_CHAT_AVAILABLE_BLOCKS
-      : ALL_COMPLETION_AVAILABLE_BLOCKS.filter(type => type !== BlockEnum.End)
-    return nodes
-  },
-  getAvailableNextNodes(isChatMode: boolean) {
-    const nodes = isChatMode ? ALL_CHAT_AVAILABLE_BLOCKS : ALL_COMPLETION_AVAILABLE_BLOCKS
-    return nodes
+    version: '2',
+    items: [],
   },
   checkValid(payload: AssignerNodeType, t: any) {
     let errorMessages = ''
     const {
-      assigned_variable_selector: assignedVarSelector,
-      write_mode: writeMode,
-      input_variable_selector: toAssignerVarSelector,
+      items: operationItems,
     } = payload
 
-    if (!errorMessages && !assignedVarSelector?.length)
-      errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t('workflow.nodes.assigner.assignedVariable') })
+    operationItems?.forEach((value) => {
+      if (!errorMessages && !value.variable_selector?.length)
+        errorMessages = t(`${i18nPrefix}.fieldRequired`, { ns: 'workflow', field: t('nodes.assigner.assignedVariable', { ns: 'workflow' }) })
 
-    if (!errorMessages && writeMode !== WriteMode.Clear) {
-      if (!toAssignerVarSelector?.length)
-        errorMessages = t(`${i18nPrefix}.fieldRequired`, { field: t('workflow.nodes.assigner.variable') })
-    }
+      if (!errorMessages && value.operation !== WriteMode.clear && value.operation !== WriteMode.removeFirst && value.operation !== WriteMode.removeLast) {
+        if (value.operation === WriteMode.set || value.operation === WriteMode.increment
+          || value.operation === WriteMode.decrement || value.operation === WriteMode.multiply
+          || value.operation === WriteMode.divide) {
+          if (!value.value && value.value !== false && typeof value.value !== 'number')
+            errorMessages = t(`${i18nPrefix}.fieldRequired`, { ns: 'workflow', field: t('nodes.assigner.variable', { ns: 'workflow' }) })
+        }
+        else if (!value.value?.length) {
+          errorMessages = t(`${i18nPrefix}.fieldRequired`, { ns: 'workflow', field: t('nodes.assigner.variable', { ns: 'workflow' }) })
+        }
+      }
+    })
 
     return {
       isValid: !errorMessages,

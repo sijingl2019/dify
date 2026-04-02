@@ -3,8 +3,9 @@ from core.rag.models.document import Document
 from tests.integration_tests.vdb.test_vector_store import (
     AbstractVectorTest,
     get_example_text,
-    setup_mock_redis,
 )
+
+pytest_plugins = ("tests.integration_tests.vdb.test_vector_store",)
 
 
 class OracleVectorTest(AbstractVectorTest):
@@ -13,11 +14,9 @@ class OracleVectorTest(AbstractVectorTest):
         self.vector = OracleVector(
             collection_name=self.collection_name,
             config=OracleVectorConfig(
-                host="localhost",
-                port=1521,
                 user="dify",
                 password="dify",
-                database="FREEPDB1",
+                dsn="localhost:1521/FREEPDB1",
             ),
         )
 

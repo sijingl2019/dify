@@ -1,149 +1,113 @@
 'use client'
-import { useTranslation } from 'react-i18next'
-import { Fragment, useMemo } from 'react'
-import { useContext } from 'use-context-selector'
-import { Menu, Transition } from '@headlessui/react'
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import s from './index.module.css'
-import { useProviderContext } from '@/context/provider-context'
-import cn from '@/utils/classnames'
 import type { Member } from '@/models/common'
+import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { memo, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { PortalToFollowElem, PortalToFollowElemContent, PortalToFollowElemTrigger } from '@/app/components/base/portal-to-follow-elem'
+import { toast } from '@/app/components/base/ui/toast'
+import { useProviderContext } from '@/context/provider-context'
 import { deleteMemberOrCancelInvitation, updateMemberRole } from '@/service/common'
-import { ToastContext } from '@/app/components/base/toast'
-
-const itemClassName = `
-  flex px-3 py-2 cursor-pointer hover:bg-gray-50 rounded-lg
-`
-const itemIconClassName = `
-  w-4 h-4 mt-[2px] mr-1 text-primary-600
-`
-const itemTitleClassName = `
-  leading-[20px] text-sm text-gray-700 whitespace-nowrap
-`
-const itemDescClassName = `
-  leading-[18px] text-xs text-gray-500 whitespace-nowrap
-`
+import { cn } from '@/utils/classnames'
 
 type IOperationProps = {
   member: Member
+  operatorRole: string
   onOperate: () => void
 }
-
-const Operation = ({
-  member,
-  onOperate,
-}: IOperationProps) => {
+const roleI18nKeyMap = {
+  admin: { label: 'members.admin', tip: 'members.adminTip' },
+  editor: { label: 'members.editor', tip: 'members.editorTip' },
+  normal: { label: 'members.normal', tip: 'members.normalTip' },
+  dataset_operator: { label: 'members.datasetOperator', tip: 'members.datasetOperatorTip' },
+} as const
+type OperationRoleKey = keyof typeof roleI18nKeyMap
+const Operation = ({ member, operatorRole, onOperate }: IOperationProps) => {
+  const [open, setOpen] = useState(false)
   const { t } = useTranslation()
   const { datasetOperatorEnabled } = useProviderContext()
   const RoleMap = {
-    owner: t('common.members.owner'),
-    admin: t('common.members.admin'),
-    editor: t('common.members.editor'),
-    normal: t('common.members.normal'),
-    dataset_operator: t('common.members.datasetOperator'),
+    owner: t('members.owner', { ns: 'common' }),
+    admin: t('members.admin', { ns: 'common' }),
+    editor: t('members.editor', { ns: 'common' }),
+    normal: t('members.normal', { ns: 'common' }),
+    dataset_operator: t('members.datasetOperator', { ns: 'common' }),
   }
-  const roleList = useMemo(() => {
-    return [
-      ...['admin', 'editor', 'normal'],
-      ...(datasetOperatorEnabled ? ['dataset_operator'] : []),
-    ]
-  }, [datasetOperatorEnabled])
-  const { notify } = useContext(ToastContext)
-  const toHump = (name: string) => name.replace(/_(\w)/g, (all, letter) => letter.toUpperCase())
+  const roleList = useMemo((): OperationRoleKey[] => {
+    if (operatorRole === 'owner') {
+      return [
+        'admin',
+        'editor',
+        'normal',
+        ...(datasetOperatorEnabled ? ['dataset_operator'] as const : []),
+      ]
+    }
+    if (operatorRole === 'admin') {
+      return [
+        'editor',
+        'normal',
+        ...(datasetOperatorEnabled ? ['dataset_operator'] as const : []),
+      ]
+    }
+    return []
+  }, [operatorRole, datasetOperatorEnabled])
   const handleDeleteMemberOrCancelInvitation = async () => {
+    setOpen(false)
     try {
       await deleteMemberOrCancelInvitation({ url: `/workspaces/current/members/${member.id}` })
       onOperate()
-      notify({ type: 'success', message: t('common.actionMsg.modifiedSuccessfully') })
+      toast.success(t('actionMsg.modifiedSuccessfully', { ns: 'common' }))
     }
-    catch (e) {
-
+    catch {
     }
   }
   const handleUpdateMemberRole = async (role: string) => {
+    setOpen(false)
     try {
       await updateMemberRole({
         url: `/workspaces/current/members/${member.id}/update-role`,
         body: { role },
       })
       onOperate()
-      notify({ type: 'success', message: t('common.actionMsg.modifiedSuccessfully') })
+      toast.success(t('actionMsg.modifiedSuccessfully', { ns: 'common' }))
     }
-    catch (e) {
-
+    catch {
     }
   }
-
   return (
-    <Menu as="div" className="relative w-full h-full">
-      {
-        ({ open }) => (
-          <>
-            <Menu.Button className={cn(
-              `
-                  group flex items-center justify-between w-full h-full
-                  hover:bg-gray-100 cursor-pointer ${open && 'bg-gray-100'}
-                  text-[13px] text-gray-700 px-3
-                `,
-            )}>
-              {RoleMap[member.role] || RoleMap.normal}
-              <ChevronDownIcon className={`w-4 h-4 group-hover:block ${open ? 'block' : 'hidden'}`} />
-            </Menu.Button>
-            <Transition
-              as={Fragment}
-              enter="transition ease-out duration-100"
-              enterFrom="transform opacity-0 scale-95"
-              enterTo="transform opacity-100 scale-100"
-              leave="transition ease-in duration-75"
-              leaveFrom="transform opacity-100 scale-100"
-              leaveTo="transform opacity-0 scale-95"
-            >
-              <Menu.Items
-                className={cn(
-                  `
-                      absolute right-0 top-[52px] z-10 bg-white border-[0.5px] border-gray-200
-                      divide-y divide-gray-100 origin-top-right rounded-lg
-                    `,
-                  s.popup,
-                )}
-              >
-                <div className="px-1 py-1">
-                  {
-                    roleList.map(role => (
-                      <Menu.Item key={role}>
-                        <div className={itemClassName} onClick={() => handleUpdateMemberRole(role)}>
-                          {
-                            role === member.role
-                              ? <CheckIcon className={itemIconClassName} />
-                              : <div className={itemIconClassName} />
-                          }
-                          <div>
-                            <div className={itemTitleClassName}>{t(`common.members.${toHump(role)}`)}</div>
-                            <div className={itemDescClassName}>{t(`common.members.${toHump(role)}Tip`)}</div>
-                          </div>
-                        </div>
-                      </Menu.Item>
-                    ))
-                  }
+    <PortalToFollowElem open={open} onOpenChange={setOpen} placement="bottom-end" offset={{ mainAxis: 4 }}>
+      <PortalToFollowElemTrigger asChild onClick={() => setOpen(prev => !prev)}>
+        <div className={cn('group flex h-full w-full cursor-pointer items-center justify-between px-3 text-text-secondary system-sm-regular hover:bg-state-base-hover', open && 'bg-state-base-hover')}>
+          {RoleMap[member.role] || RoleMap.normal}
+          <ChevronDownIcon className={cn('h-4 w-4 shrink-0 group-hover:block', open ? 'block' : 'hidden')} />
+        </div>
+      </PortalToFollowElemTrigger>
+      <PortalToFollowElemContent className="z-1002">
+        <div className={cn('inline-flex flex-col rounded-xl border-[0.5px] border-components-panel-border bg-components-panel-bg-blur shadow-lg backdrop-blur-xs')}>
+          <div className="p-1">
+            {roleList.map(role => (
+              <div key={role} className="flex cursor-pointer rounded-lg px-3 py-2 hover:bg-state-base-hover" onClick={() => handleUpdateMemberRole(role)}>
+                {role === member.role
+                  ? <CheckIcon className="mr-1 mt-[2px] h-4 w-4 text-text-accent" />
+                  : <div className="mr-1 mt-[2px] h-4 w-4 text-text-accent" />}
+                <div>
+                  <div className="whitespace-nowrap text-text-secondary system-sm-semibold">{t(roleI18nKeyMap[role].label, { ns: 'common' })}</div>
+                  <div className="whitespace-nowrap text-text-tertiary system-xs-regular">{t(roleI18nKeyMap[role].tip, { ns: 'common' })}</div>
                 </div>
-                <Menu.Item>
-                  <div className='px-1 py-1'>
-                    <div className={itemClassName} onClick={handleDeleteMemberOrCancelInvitation}>
-                      <div className={itemIconClassName} />
-                      <div>
-                        <div className={itemTitleClassName}>{t('common.members.removeFromTeam')}</div>
-                        <div className={itemDescClassName}>{t('common.members.removeFromTeamTip')}</div>
-                      </div>
-                    </div>
-                  </div>
-                </Menu.Item>
-              </Menu.Items>
-            </Transition>
-          </>
-        )
-      }
-    </Menu>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-divider-subtle p-1">
+            <div className="flex cursor-pointer rounded-lg px-3 py-2 hover:bg-state-base-hover" onClick={handleDeleteMemberOrCancelInvitation}>
+              <div className="mr-1 mt-[2px] h-4 w-4 text-text-accent" />
+              <div>
+                <div className="whitespace-nowrap text-text-secondary system-sm-semibold">{t('members.removeFromTeam', { ns: 'common' })}</div>
+                <div className="whitespace-nowrap text-text-tertiary system-xs-regular">{t('members.removeFromTeamTip', { ns: 'common' })}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </PortalToFollowElemContent>
+    </PortalToFollowElem>
   )
 }
-
-export default Operation
+export default memo(Operation)

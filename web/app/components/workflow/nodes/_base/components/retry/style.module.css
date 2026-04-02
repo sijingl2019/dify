@@ -1,0 +1,7 @@
+@reference "../../../../../../styles/globals.css";
+
+.input::-webkit-inner-spin-button,
+.input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
